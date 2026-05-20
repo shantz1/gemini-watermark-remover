@@ -436,9 +436,12 @@ function removeWatermarkLikeEngine(imageData, alpha48, alpha96) {
     });
 
     const position = processed.meta.position ?? defaultPosition;
-    const alphaMap = processed.meta.size === 96
+    let alphaMap = processed.meta.size === 96
         ? alpha96
         : (processed.meta.size === 48 ? alpha48 : interpolateAlphaMap(alpha96, 96, position.width));
+    if (processed.meta.templateWarp) {
+        alphaMap = warpAlphaMap(alphaMap, position.width, processed.meta.templateWarp);
+    }
     const finalImageData = processed.imageData;
 
     if (processed.meta.applied === false) {

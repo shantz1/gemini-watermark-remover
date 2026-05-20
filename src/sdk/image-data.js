@@ -23,11 +23,15 @@ function buildEmbeddedGetAlphaMap(alpha48, alpha96) {
 export function removeWatermarkFromImageDataSync(imageData, options = {}) {
     const alpha48 = options.alpha48 || getEmbeddedAlphaMap(48);
     const alpha96 = options.alpha96 || getEmbeddedAlphaMap(96);
+    const alpha96Variants = options.alpha96Variants || {
+        '20260520': getEmbeddedAlphaMap('96-20260520')
+    };
 
     return processWatermarkImageData(imageData, {
         ...options,
         alpha48,
         alpha96,
+        alpha96Variants,
         getAlphaMap: options.getAlphaMap || buildEmbeddedGetAlphaMap(alpha48, alpha96)
     });
 }
@@ -38,11 +42,15 @@ export async function removeWatermarkFromImageData(imageData, options = {}) {
         : await createWatermarkEngine();
     const alpha48 = await engine.getAlphaMap(48);
     const alpha96 = await engine.getAlphaMap(96);
+    const alpha96Variants = options.alpha96Variants || {
+        '20260520': await engine.getAlphaMap('96-20260520')
+    };
 
     return processWatermarkImageData(imageData, {
         ...options,
         alpha48,
         alpha96,
+        alpha96Variants,
         getAlphaMap: options.getAlphaMap || buildEmbeddedGetAlphaMap(alpha48, alpha96)
     });
 }

@@ -2,7 +2,13 @@ const WATERMARK_CONFIG_BY_TIER = Object.freeze({
     '0.5k': Object.freeze({ logoSize: 48, marginRight: 32, marginBottom: 32 }),
     '1k': Object.freeze({ logoSize: 96, marginRight: 64, marginBottom: 64 }),
     '2k': Object.freeze({ logoSize: 96, marginRight: 64, marginBottom: 64 }),
-    '4k': Object.freeze({ logoSize: 96, marginRight: 64, marginBottom: 64 })
+    '4k': Object.freeze({ logoSize: 96, marginRight: 64, marginBottom: 64 }),
+    '2k-new-margin': Object.freeze({
+        logoSize: 96,
+        marginRight: 192,
+        marginBottom: 192,
+        alphaVariant: '20260520'
+    })
 });
 
 // Gemini image generation does not emit arbitrary dimensions.
@@ -38,16 +44,16 @@ const OFFICIAL_GEMINI_IMAGE_SIZES = Object.freeze([
     ]),
     ...createEntries('gemini-3.x-image', '1k', [
         ['1:1', 1024, 1024],
-        ['1:4', 512, 2064],
-        ['1:8', 352, 2928],
+        ['1:4', 512, 2048],
+        ['1:8', 384, 3072],
         ['2:3', 848, 1264],
         ['3:2', 1264, 848],
         ['3:4', 896, 1200],
-        ['4:1', 2064, 512],
+        ['4:1', 2048, 512],
         ['4:3', 1200, 896],
         ['4:5', 928, 1152],
         ['5:4', 1152, 928],
-        ['8:1', 2928, 352],
+        ['8:1', 3072, 384],
         ['9:16', 768, 1376],
         ['16:9', 1376, 768],
         ['16:9', 1408, 768],
@@ -55,19 +61,22 @@ const OFFICIAL_GEMINI_IMAGE_SIZES = Object.freeze([
     ]),
     ...createEntries('gemini-3.x-image', '2k', [
         ['1:1', 2048, 2048],
-        ['1:4', 512, 2048],
-        ['1:8', 384, 3072],
+        ['1:4', 1024, 4096],
+        ['1:8', 768, 6144],
         ['2:3', 1696, 2528],
         ['3:2', 2528, 1696],
         ['3:4', 1792, 2400],
-        ['4:1', 2048, 512],
+        ['4:1', 4096, 1024],
         ['4:3', 2400, 1792],
         ['4:5', 1856, 2304],
         ['5:4', 2304, 1856],
-        ['8:1', 3072, 384],
+        ['8:1', 6144, 768],
         ['9:16', 1536, 2752],
         ['16:9', 2752, 1536],
         ['21:9', 3168, 1344]
+    ]),
+    ...createEntries('gemini-3.x-image', '2k-new-margin', [
+        ['16:9', 2816, 1536]
     ]),
     ...createEntries('gemini-3.x-image', '4k', [
         ['1:1', 4096, 4096],
@@ -122,6 +131,21 @@ function buildConfigKey(config) {
     return `${config.logoSize}:${config.marginRight}:${config.marginBottom}`;
 }
 
+function createNewMarginVariantConfig(baseConfig, width, height) {
+    if (!baseConfig || baseConfig.logoSize !== 96) return null;
+    if (baseConfig.marginRight === 192 && baseConfig.marginBottom === 192) return null;
+
+    const config = {
+        logoSize: 96,
+        marginRight: 192,
+        marginBottom: 192,
+        alphaVariant: '20260520'
+    };
+    const x = width - config.marginRight - config.logoSize;
+    const y = height - config.marginBottom - config.logoSize;
+    return x >= 0 && y >= 0 ? config : null;
+}
+
 export function matchOfficialGeminiImageSize(width, height) {
     const normalizedWidth = normalizeDimension(width);
     const normalizedHeight = normalizeDimension(height);
@@ -160,7 +184,16 @@ export function resolveOfficialGeminiSearchConfigs(
         normalizedHeight
     );
     if (exactOfficialConfig) {
-        return [{ ...exactOfficialConfig }];
+        const configs = [{ ...exactOfficialConfig }];
+        const newMarginVariant = createNewMarginVariantConfig(
+            exactOfficialConfig,
+            normalizedWidth,
+            normalizedHeight
+        );
+        if (newMarginVariant) {
+            configs.push(newMarginVariant);
+        }
+        return configs;
     }
 
     // Near-official exports are often uniformly scaled from an official size.

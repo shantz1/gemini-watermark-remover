@@ -35,12 +35,28 @@ const STANDARD_NEARBY_SEARCH_RESIDUAL_THRESHOLD = 0.18;
 const STANDARD_NEARBY_SEARCH_GRADIENT_THRESHOLD = 0.05;
 const STANDARD_LOCAL_SHIFT_STRONG_BASE_GRADIENT_SCORE = 0.35;
 const STANDARD_LOCAL_SHIFT_STRONG_BASE_SPATIAL_SCORE = 0.8;
+const STANDARD_LOCAL_SHIFT_CANONICAL_MIN_GRADIENT_SCORE = 0.2;
+const STANDARD_LOCAL_SHIFT_CANONICAL_MIN_SPATIAL_SCORE = 0.22;
 const STANDARD_LOCAL_SHIFT_WEAK_CANDIDATE_GRADIENT_SCORE = 0.12;
 const STANDARD_LOCAL_SHIFT_WEAK_CANDIDATE_SPATIAL_SCORE = 0.65;
 const STANDARD_LOCAL_SHIFT_MIN_VALIDATION_ADVANTAGE = 0.3;
 const STANDARD_LOCAL_SHIFT_SKIP_PROCESSED_GRADIENT_THRESHOLD = 0.02;
 const STANDARD_LOCAL_SHIFT_PRESERVE_CLEAN_BASE_GRADIENT_THRESHOLD = 0.02;
 const STANDARD_LOCAL_SHIFT_MAX_CANDIDATE_GRADIENT_FOR_CLEAN_BASE = 0.03;
+const STANDARD_PRESERVE_GRADIENT_DELTA = 0.25;
+const STANDARD_PRESERVE_MAX_RESIDUAL = 0.4;
+const STANDARD_PRESERVE_MIN_IMPROVEMENT = 0.3;
+const STANDARD_TEXT_OVERLAP_MIN_SPATIAL_SCORE = 0.22;
+const STANDARD_TEXT_OVERLAP_MIN_GRADIENT_SCORE = 0.18;
+const STANDARD_TEXT_OVERLAP_MIN_IMPROVEMENT = 0.25;
+const STANDARD_TEXT_OVERLAP_MAX_RESIDUAL = 0.1;
+const STANDARD_TEXT_OVERLAP_MIN_GRADIENT_DROP = 0.1;
+const STANDARD_HARD_REJECT_OVERRIDE_MIN_SPATIAL_SCORE = 0.9;
+const STANDARD_HARD_REJECT_OVERRIDE_MIN_GRADIENT_SCORE = 0.7;
+const STANDARD_HARD_REJECT_OVERRIDE_MAX_RESIDUAL = 0.08;
+const STANDARD_HARD_REJECT_OVERRIDE_MAX_GRADIENT = 0.1;
+const STANDARD_HARD_REJECT_OVERRIDE_MIN_IMPROVEMENT = 0.7;
+const STANDARD_HARD_REJECT_OVERRIDE_MAX_NEAR_BLACK_INCREASE = 0.01;
 const TEMPLATE_ALIGN_SHIFTS = [-0.5, -0.25, 0, 0.25, 0.5];
 const TEMPLATE_ALIGN_SCALES = [0.99, 1, 1.01];
 const STANDARD_NEARBY_SHIFTS = [-12, -8, -4, 0, 4, 8, 12];
@@ -81,6 +97,7 @@ function buildStandardCandidateSeeds({
     position,
     alpha48,
     alpha96,
+    alpha96Variants = null,
     getAlphaMap,
     resolveAlphaMap = null,
     includeCatalogVariants = true
@@ -112,13 +129,13 @@ function buildStandardCandidateSeeds({
             continue;
         }
 
-        const alphaMap = typeof resolveAlphaMap === 'function'
-            ? resolveAlphaMap(candidateConfig.logoSize)
-            : resolveAlphaMapForSize(candidateConfig.logoSize, {
-                alpha48,
-                alpha96,
-                getAlphaMap
-            });
+        const alphaMap = resolveAlphaMapForConfig(candidateConfig, {
+            alpha48,
+            alpha96,
+            alpha96Variants,
+            getAlphaMap,
+            resolveAlphaMap
+        });
         if (!alphaMap) continue;
 
         seeds.push({
@@ -126,7 +143,10 @@ function buildStandardCandidateSeeds({
             position: candidatePosition,
             alphaMap,
             source: candidateConfig === config ? 'standard' : 'standard+catalog',
-            provenance: candidateConfig === config ? null : { catalogVariant: true }
+            provenance: mergeCandidateProvenance(
+                candidateConfig === config ? null : { catalogVariant: true },
+                candidateConfig.alphaVariant ? { alphaVariant: candidateConfig.alphaVariant } : null
+            )
         });
     }
 
@@ -167,6 +187,26 @@ function resolveAlphaMapForSize(size, { alpha48, alpha96, getAlphaMap } = {}) {
     if (provided) return provided;
 
     return alpha96 ? interpolateAlphaMap(alpha96, 96, size) : null;
+}
+
+function resolveAlphaMapForConfig(config, {
+    alpha48,
+    alpha96,
+    alpha96Variants = null,
+    getAlphaMap,
+    resolveAlphaMap = null
+} = {}) {
+    if (!config) return null;
+    if (config.alphaVariant && config.logoSize === 96 && alpha96Variants) {
+        return alpha96Variants[config.alphaVariant] ?? null;
+    }
+    return typeof resolveAlphaMap === 'function'
+        ? resolveAlphaMap(config.logoSize)
+        : resolveAlphaMapForSize(config.logoSize, {
+            alpha48,
+            alpha96,
+            getAlphaMap
+        });
 }
 
 function createAlphaMapResolver({ alpha48, alpha96, getAlphaMap }) {
@@ -234,9 +274,31 @@ export function evaluateRestorationCandidate({
         position
     });
     const texturePenalty = textureAssessment.texturePenalty;
+    const gradientDrop = originalScores.gradientScore - processedScores.gradientScore;
+    const nearBlackIncreaseAllowed =
+        nearBlackIncrease <= MAX_NEAR_BLACK_RATIO_INCREASE ||
+        (
+            source === 'standard' &&
+            originalScores.spatialScore >= STANDARD_TEXT_OVERLAP_MIN_SPATIAL_SCORE &&
+            originalScores.gradientScore >= STANDARD_TEXT_OVERLAP_MIN_GRADIENT_SCORE &&
+            improvement >= STANDARD_TEXT_OVERLAP_MIN_IMPROVEMENT &&
+            Math.abs(processedScores.spatialScore) <= STANDARD_TEXT_OVERLAP_MAX_RESIDUAL &&
+            gradientDrop >= STANDARD_TEXT_OVERLAP_MIN_GRADIENT_DROP
+        );
+    const hardRejectAllowed =
+        textureAssessment.hardReject !== true ||
+        (
+            isStandardCandidateSource({ source }) &&
+            originalScores.spatialScore >= STANDARD_HARD_REJECT_OVERRIDE_MIN_SPATIAL_SCORE &&
+            originalScores.gradientScore >= STANDARD_HARD_REJECT_OVERRIDE_MIN_GRADIENT_SCORE &&
+            Math.abs(processedScores.spatialScore) <= STANDARD_HARD_REJECT_OVERRIDE_MAX_RESIDUAL &&
+            processedScores.gradientScore <= STANDARD_HARD_REJECT_OVERRIDE_MAX_GRADIENT &&
+            improvement >= STANDARD_HARD_REJECT_OVERRIDE_MIN_IMPROVEMENT &&
+            nearBlackIncrease <= STANDARD_HARD_REJECT_OVERRIDE_MAX_NEAR_BLACK_INCREASE
+        );
     const accepted =
-        textureAssessment.hardReject !== true &&
-        nearBlackIncrease <= MAX_NEAR_BLACK_RATIO_INCREASE &&
+        hardRejectAllowed &&
+        nearBlackIncreaseAllowed &&
         improvement >= VALIDATION_MIN_IMPROVEMENT &&
         (
             Math.abs(processedScores.spatialScore) <= VALIDATION_TARGET_RESIDUAL ||
@@ -371,6 +433,7 @@ function isDriftedStandardCandidate(candidate) {
         (
             candidate?.provenance?.localShift === true ||
             candidate?.provenance?.sizeJitter === true ||
+            candidate?.provenance?.previewAnchor === true ||
             String(candidate?.source || '').includes('+warp')
         );
 }
@@ -378,7 +441,8 @@ function isDriftedStandardCandidate(candidate) {
 function isCanonicalStandardCandidate(candidate) {
     return isStandardCandidateSource(candidate) &&
         candidate?.provenance?.localShift !== true &&
-        candidate?.provenance?.sizeJitter !== true;
+        candidate?.provenance?.sizeJitter !== true &&
+        candidate?.provenance?.previewAnchor !== true;
 }
 
 function hasStrongCanonicalAnchorSignal(candidate) {
@@ -387,7 +451,11 @@ function hasStrongCanonicalAnchorSignal(candidate) {
     if (!Number.isFinite(baseSpatial) || !Number.isFinite(baseGradient)) {
         return false;
     }
-    return baseGradient >= STANDARD_LOCAL_SHIFT_STRONG_BASE_GRADIENT_SCORE ||
+    return (
+        baseGradient >= STANDARD_LOCAL_SHIFT_CANONICAL_MIN_GRADIENT_SCORE &&
+        baseSpatial >= STANDARD_LOCAL_SHIFT_CANONICAL_MIN_SPATIAL_SCORE
+    ) ||
+        baseGradient >= STANDARD_LOCAL_SHIFT_STRONG_BASE_GRADIENT_SCORE ||
         baseSpatial >= STANDARD_LOCAL_SHIFT_STRONG_BASE_SPATIAL_SCORE;
 }
 
@@ -415,6 +483,25 @@ function leavesWorseResidualGradientThanCanonical(canonicalCandidate, driftCandi
         Math.max(0, driftProcessedGradientRaw) >= STANDARD_LOCAL_SHIFT_MAX_CANDIDATE_GRADIENT_FOR_CLEAN_BASE;
 }
 
+function leavesMuchWorseResidualGradientThanCanonical(canonicalCandidate, driftCandidate) {
+    const canonicalProcessedSpatial = Number(canonicalCandidate?.processedSpatialScore);
+    const canonicalProcessedGradient = Number(canonicalCandidate?.processedGradientScore);
+    const canonicalImprovement = Number(canonicalCandidate?.improvement);
+    const driftProcessedGradient = Number(driftCandidate?.processedGradientScore);
+    if (
+        !Number.isFinite(canonicalProcessedSpatial) ||
+        !Number.isFinite(canonicalProcessedGradient) ||
+        !Number.isFinite(canonicalImprovement) ||
+        !Number.isFinite(driftProcessedGradient)
+    ) {
+        return false;
+    }
+
+    return Math.abs(canonicalProcessedSpatial) <= STANDARD_PRESERVE_MAX_RESIDUAL &&
+        canonicalImprovement >= STANDARD_PRESERVE_MIN_IMPROVEMENT &&
+        driftProcessedGradient >= canonicalProcessedGradient + STANDARD_PRESERVE_GRADIENT_DELTA;
+}
+
 function shouldPreserveCanonicalAnchor(canonicalCandidate, driftCandidate) {
     if (!isCanonicalStandardCandidate(canonicalCandidate)) return false;
     if (!isDriftedStandardCandidate(driftCandidate)) return false;
@@ -430,7 +517,9 @@ function shouldPreserveCanonicalAnchor(canonicalCandidate, driftCandidate) {
         hasStrongCanonicalAnchorSignal(canonicalCandidate) &&
         hasWeakDriftEvidence(driftCandidate) &&
         validationAdvantage < STANDARD_LOCAL_SHIFT_MIN_VALIDATION_ADVANTAGE
-    ) || leavesWorseResidualGradientThanCanonical(canonicalCandidate, driftCandidate);
+    ) ||
+        leavesWorseResidualGradientThanCanonical(canonicalCandidate, driftCandidate) ||
+        leavesMuchWorseResidualGradientThanCanonical(canonicalCandidate, driftCandidate);
 }
 
 function shouldPreserveStrongStandardAnchor(currentBest, candidate) {
@@ -919,6 +1008,7 @@ function resolveStandardAnchorSelection({
     position,
     alpha48,
     alpha96,
+    alpha96Variants,
     getAlphaMap,
     resolveAlphaMap
 }) {
@@ -928,6 +1018,7 @@ function resolveStandardAnchorSelection({
         position,
         alpha48,
         alpha96,
+        alpha96Variants,
         getAlphaMap,
         resolveAlphaMap,
         includeCatalogVariants: false
@@ -948,6 +1039,7 @@ function resolveStandardAnchorSelection({
             position,
             alpha48,
             alpha96,
+            alpha96Variants,
             getAlphaMap,
             resolveAlphaMap,
             includeCatalogVariants: true
@@ -1190,7 +1282,8 @@ export function selectInitialCandidate({
     alpha96,
     getAlphaMap,
     allowAdaptiveSearch,
-    alphaGainCandidates
+    alphaGainCandidates,
+    alpha96Variants = null
 }) {
     const resolveAlphaMap = createAlphaMapResolver({ alpha48, alpha96, getAlphaMap });
     const fallbackAlphaMap = config.logoSize === 96 ? alpha96 : alpha48;
@@ -1207,6 +1300,7 @@ export function selectInitialCandidate({
         position,
         alpha48,
         alpha96,
+        alpha96Variants,
         getAlphaMap,
         resolveAlphaMap
     });

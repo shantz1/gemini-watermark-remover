@@ -582,6 +582,7 @@ export function processWatermarkImageData(imageData, options = {}) {
         position,
         alpha48,
         alpha96,
+        alpha96Variants: options.alpha96Variants ?? null,
         getAlphaMap: options.getAlphaMap,
         allowAdaptiveSearch,
         alphaGainCandidates

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.15 - 2026-05-20
+
+### Watermark Removal
+
+- Added support for the updated Gemini 96px watermark alpha map and 192px right/bottom anchor used by newly observed 2K outputs.
+- Tightened candidate selection so clean canonical 48px/96px anchors are preserved when smaller preview-anchor candidates leave stronger residual edges.
+- Kept preview-anchor cleanup eligible for its own warp and edge-cleanup refinement path, avoiding regressions on real Gemini preview fixtures.
+
+### Quality
+
+- Added regression fixtures for the new Gemini watermark position, updated 2026-05-20 sample images, and the alternate 96px alpha template.
+- Re-verified full tests, production build, and sample benchmark coverage for the current sample set.
+
 ## 1.0.14 - 2026-05-03
 
 ### Userscript

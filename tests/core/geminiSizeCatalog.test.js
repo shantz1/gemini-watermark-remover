@@ -9,6 +9,104 @@ import {
     resolveOfficialGeminiWatermarkConfig
 } from '../../src/core/geminiSizeCatalog.js';
 
+function createDocumentedRows(modelFamily, resolutionTier, rows) {
+    return rows.map(([aspectRatio, width, height]) => ({
+        modelFamily,
+        resolutionTier,
+        aspectRatio,
+        width,
+        height
+    }));
+}
+
+const DOCUMENTED_GEMINI_IMAGE_SIZES = Object.freeze([
+    ...createDocumentedRows('gemini-3.x-image', '0.5k', [
+        ['1:1', 512, 512],
+        ['1:4', 256, 1024],
+        ['1:8', 192, 1536],
+        ['2:3', 424, 632],
+        ['3:2', 632, 424],
+        ['3:4', 448, 600],
+        ['4:1', 1024, 256],
+        ['4:3', 600, 448],
+        ['4:5', 464, 576],
+        ['5:4', 576, 464],
+        ['8:1', 1536, 192],
+        ['9:16', 384, 688],
+        ['16:9', 688, 384],
+        ['21:9', 792, 168]
+    ]),
+    ...createDocumentedRows('gemini-3.x-image', '1k', [
+        ['1:1', 1024, 1024],
+        ['1:4', 512, 2048],
+        ['1:8', 384, 3072],
+        ['2:3', 848, 1264],
+        ['3:2', 1264, 848],
+        ['3:4', 896, 1200],
+        ['4:1', 2048, 512],
+        ['4:3', 1200, 896],
+        ['4:5', 928, 1152],
+        ['5:4', 1152, 928],
+        ['8:1', 3072, 384],
+        ['9:16', 768, 1376],
+        ['16:9', 1376, 768],
+        ['21:9', 1584, 672]
+    ]),
+    ...createDocumentedRows('gemini-3.x-image', '2k', [
+        ['1:1', 2048, 2048],
+        ['1:4', 1024, 4096],
+        ['1:8', 768, 6144],
+        ['2:3', 1696, 2528],
+        ['3:2', 2528, 1696],
+        ['3:4', 1792, 2400],
+        ['4:1', 4096, 1024],
+        ['4:3', 2400, 1792],
+        ['4:5', 1856, 2304],
+        ['5:4', 2304, 1856],
+        ['8:1', 6144, 768],
+        ['9:16', 1536, 2752],
+        ['16:9', 2752, 1536],
+        ['21:9', 3168, 1344]
+    ]),
+    ...createDocumentedRows('gemini-3.x-image', '4k', [
+        ['1:1', 4096, 4096],
+        ['1:4', 2048, 8192],
+        ['1:8', 1536, 12288],
+        ['2:3', 3392, 5056],
+        ['3:2', 5056, 3392],
+        ['3:4', 3584, 4800],
+        ['4:1', 8192, 2048],
+        ['4:3', 4800, 3584],
+        ['4:5', 3712, 4608],
+        ['5:4', 4608, 3712],
+        ['8:1', 12288, 1536],
+        ['9:16', 3072, 5504],
+        ['16:9', 5504, 3072],
+        ['21:9', 6336, 2688]
+    ]),
+    ...createDocumentedRows('gemini-2.5-flash-image', '1k', [
+        ['1:1', 1024, 1024],
+        ['2:3', 832, 1248],
+        ['3:2', 1248, 832],
+        ['3:4', 864, 1184],
+        ['4:3', 1184, 864],
+        ['4:5', 896, 1152],
+        ['5:4', 1152, 896],
+        ['9:16', 768, 1344],
+        ['16:9', 1344, 768],
+        ['21:9', 1536, 672]
+    ])
+]);
+
+function buildOfficialSizeKey(entry) {
+    return [
+        entry.modelFamily,
+        entry.resolutionTier,
+        entry.aspectRatio,
+        `${entry.width}x${entry.height}`
+    ].join('|');
+}
+
 test('matchOfficialGeminiImageSize should match documented Gemini 3.x 1K size', () => {
     const match = matchOfficialGeminiImageSize(848, 1264);
 
@@ -72,12 +170,29 @@ test('resolveGeminiWatermarkSearchConfigs should keep default config first and d
     );
 });
 
-test('resolveOfficialGeminiSearchConfigs should not downgrade exact official dimensions into smaller search variants', () => {
+test('resolveOfficialGeminiSearchConfigs should keep canonical exact official dimensions first and add the 192px-margin variant', () => {
     const configs = resolveOfficialGeminiSearchConfigs(768, 1376);
 
     assert.deepEqual(configs, [
-        { logoSize: 96, marginRight: 64, marginBottom: 64 }
+        { logoSize: 96, marginRight: 64, marginBottom: 64 },
+        { logoSize: 96, marginRight: 192, marginBottom: 192, alphaVariant: '20260520' }
     ]);
+});
+
+test('resolveOfficialGeminiSearchConfigs should not add the 192px-margin variant to 0.5K outputs', () => {
+    const configs = resolveOfficialGeminiSearchConfigs(512, 512);
+
+    assert.deepEqual(configs, [
+        { logoSize: 48, marginRight: 32, marginBottom: 32 }
+    ]);
+});
+
+test('OFFICIAL_GEMINI_IMAGE_SIZES should include every documented Gemini image size', () => {
+    const catalogKeys = new Set(OFFICIAL_GEMINI_IMAGE_SIZES.map(buildOfficialSizeKey));
+    const missingRows = DOCUMENTED_GEMINI_IMAGE_SIZES
+        .filter((entry) => !catalogKeys.has(buildOfficialSizeKey(entry)));
+
+    assert.deepEqual(missingRows, []);
 });
 
 test('resolveOfficialGeminiWatermarkConfig should cover every documented portrait Gemini size', () => {

@@ -57,6 +57,16 @@ export class WatermarkEngine {
      * @returns {Promise<Float32Array>} Alpha map
      */
     async getAlphaMap(size) {
+        if (size === '96-20260520') {
+            if (this.alphaMaps[size]) return this.alphaMaps[size];
+            const alphaMap = getEmbeddedAlphaMap(size);
+            if (!alphaMap) {
+                throw new Error(`Missing embedded alpha map for size ${size}`);
+            }
+            this.alphaMaps[size] = alphaMap;
+            return alphaMap;
+        }
+
         // For non-standard watermark size, interpolate from 96x96 alpha map.
         if (size !== 48 && size !== 96) {
             if (this.alphaMaps[size]) return this.alphaMaps[size];
@@ -104,10 +114,14 @@ export class WatermarkEngine {
         const getImageDataMs = now() - readStartedAt;
         const alpha48 = await this.getAlphaMap(48);
         const alpha96 = await this.getAlphaMap(96);
+        const alpha96NewMargin = await this.getAlphaMap('96-20260520');
         const processingStartedAt = now();
         const result = processWatermarkImageData(originalImageData, {
             alpha48,
             alpha96,
+            alpha96Variants: {
+                '20260520': alpha96NewMargin
+            },
             adaptiveMode: options.adaptiveMode,
             maxPasses: options.maxPasses,
             debugTimings: options.debugTimings === true,

@@ -442,7 +442,10 @@ test('processWatermarkImageData should avoid local-shift drift on debug2-source 
     });
 
     assert.ok(result.meta.applied, `skipReason=${result.meta.skipReason}`);
-    assert.equal(result.meta.source, 'standard', `expected standard anchor to win, got ${result.meta.source}`);
+    assert.ok(
+        result.meta.source.startsWith('standard') && !result.meta.source.includes('+local'),
+        `expected standard anchor to win, got ${result.meta.source}`
+    );
     assert.deepEqual(
         result.meta.position,
         { x: 688, y: 1296, width: 48, height: 48 },
@@ -451,6 +454,82 @@ test('processWatermarkImageData should avoid local-shift drift on debug2-source 
     assert.ok(
         result.meta.detection.processedGradientScore < 0.02,
         `expected debug2-source residual gradient < 0.02, got ${result.meta.detection.processedGradientScore}`
+    );
+});
+
+test('processWatermarkImageData should keep 20260520-1.png on the canonical 48px anchor', async () => {
+    const alpha48 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_48.png')));
+    const alpha96 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96.png')));
+    const imageData = await decodeImageDataInNode(path.resolve('src/assets/samples/20260520-1.png'));
+
+    const result = processWatermarkImageData(imageData, {
+        alpha48,
+        alpha96,
+        adaptiveMode: 'never',
+        maxPasses: 1,
+        getAlphaMap: (size) => size === 48 ? alpha48 : interpolateAlphaMap(alpha96, 96, size)
+    });
+
+    assert.ok(result.meta.applied, `skipReason=${result.meta.skipReason}`);
+    assert.deepEqual(
+        result.meta.position,
+        { x: 1328, y: 688, width: 48, height: 48 }
+    );
+    assert.ok(
+        !String(result.meta.source).includes('+local'),
+        `expected canonical standard anchor, got source=${result.meta.source}`
+    );
+});
+
+test('processWatermarkImageData should remove the 2816x1536 issue #68 watermark at the new 192px margin', async () => {
+    const alpha48 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_48.png')));
+    const alpha96 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96.png')));
+    const alpha96NewMargin = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96_20260520.png')));
+    const imageData = await decodeImageDataInNode(path.resolve('tests/fixtures/issue68-new-position.png'));
+
+    const result = processWatermarkImageData(imageData, {
+        alpha48,
+        alpha96,
+        alpha96Variants: {
+            '20260520': alpha96NewMargin
+        },
+        adaptiveMode: 'never',
+        maxPasses: 1,
+        getAlphaMap: (size) => size === 48 ? alpha48 : interpolateAlphaMap(alpha96, 96, size)
+    });
+
+    assert.ok(result.meta.applied, `skipReason=${result.meta.skipReason}`);
+    assert.deepEqual(
+        result.meta.position,
+        { x: 2528, y: 1248, width: 96, height: 96 }
+    );
+    assert.ok(
+        result.meta.detection.processedGradientScore < 0.05,
+        `expected residual gradient < 0.05, got ${result.meta.detection.processedGradientScore}, source=${result.meta.source}`
+    );
+});
+
+test('processWatermarkImageData should keep 20260520-5.png on the full 96px anchor', async () => {
+    const alpha48 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_48.png')));
+    const alpha96 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96.png')));
+    const imageData = await decodeImageDataInNode(path.resolve('src/assets/samples/20260520-5.png'));
+
+    const result = processWatermarkImageData(imageData, {
+        alpha48,
+        alpha96,
+        adaptiveMode: 'never',
+        maxPasses: 1,
+        getAlphaMap: (size) => size === 48 ? alpha48 : interpolateAlphaMap(alpha96, 96, size)
+    });
+
+    assert.ok(result.meta.applied, `skipReason=${result.meta.skipReason}`);
+    assert.deepEqual(
+        result.meta.position,
+        { x: 2548, y: 1376, width: 96, height: 96 }
+    );
+    assert.ok(
+        result.meta.detection.processedGradientScore < 0.1,
+        `expected residual gradient < 0.1, got ${result.meta.detection.processedGradientScore}, source=${result.meta.source}`
     );
 });
 
