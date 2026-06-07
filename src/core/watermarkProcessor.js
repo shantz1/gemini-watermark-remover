@@ -26,7 +26,31 @@ const OUTLINE_REFINEMENT_THRESHOLD = 0.42;
 const OUTLINE_REFINEMENT_MIN_GAIN = 1.2;
 const SUBPIXEL_REFINE_SHIFTS = [-0.25, 0, 0.25];
 const SUBPIXEL_REFINE_SCALES = [0.99, 1, 1.01];
-const ALPHA_GAIN_CANDIDATES = [1.05, 1.12, 1.2, 1.28, 1.36, 1.45, 1.52, 1.6, 1.7, 1.85, 2.0, 2.2, 2.4, 2.6];
+const ALPHA_PARAMETER_GROUPS = Object.freeze([
+    { name: 'gemini-weak-alpha-202606', alphaGain: 0.6, standardPriority: true },
+    { name: 'gemini-standard-alpha', alphaGain: 1, standardPriority: true },
+    { name: 'weak-alpha-conservative', alphaGain: 0.55 },
+    { name: 'weak-alpha-light', alphaGain: 0.7 },
+    { name: 'weak-alpha-mid', alphaGain: 0.85 },
+    { name: 'strong-alpha-1.05', alphaGain: 1.05 },
+    { name: 'strong-alpha-1.12', alphaGain: 1.12 },
+    { name: 'strong-alpha-1.20', alphaGain: 1.2 },
+    { name: 'strong-alpha-1.28', alphaGain: 1.28 },
+    { name: 'strong-alpha-1.36', alphaGain: 1.36 },
+    { name: 'strong-alpha-1.45', alphaGain: 1.45 },
+    { name: 'strong-alpha-1.52', alphaGain: 1.52 },
+    { name: 'strong-alpha-1.60', alphaGain: 1.6 },
+    { name: 'strong-alpha-1.70', alphaGain: 1.7 },
+    { name: 'strong-alpha-1.85', alphaGain: 1.85 },
+    { name: 'strong-alpha-2.00', alphaGain: 2.0 },
+    { name: 'strong-alpha-2.20', alphaGain: 2.2 },
+    { name: 'strong-alpha-2.40', alphaGain: 2.4 },
+    { name: 'strong-alpha-2.60', alphaGain: 2.6 }
+]);
+const ALPHA_GAIN_CANDIDATES = ALPHA_PARAMETER_GROUPS.map((group) => group.alphaGain);
+const STANDARD_ALPHA_PRIORITY_GAINS = ALPHA_PARAMETER_GROUPS
+    .filter((group) => group.standardPriority === true)
+    .map((group) => group.alphaGain);
 const PREVIEW_EDGE_CLEANUP_MAX_SIZE = 40;
 const PREVIEW_EDGE_CLEANUP_SPATIAL_THRESHOLD = 0.08;
 const PREVIEW_EDGE_CLEANUP_GRADIENT_THRESHOLD = 0.1;
@@ -548,6 +572,7 @@ export function processWatermarkImageData(imageData, options = {}) {
     const originalImageData = cloneImageData(imageData);
     const { alpha48, alpha96 } = options;
     const alphaGainCandidates = ALPHA_GAIN_CANDIDATES;
+    const alphaPriorityGains = STANDARD_ALPHA_PRIORITY_GAINS;
 
     if (!alpha48 || !alpha96) {
         throw new Error('processWatermarkImageData requires alpha48 and alpha96');
@@ -585,7 +610,8 @@ export function processWatermarkImageData(imageData, options = {}) {
         alpha96Variants: options.alpha96Variants ?? null,
         getAlphaMap: options.getAlphaMap,
         allowAdaptiveSearch,
-        alphaGainCandidates
+        alphaGainCandidates,
+        alphaPriorityGains
     });
     if (debugTimingsEnabled) {
         debugTimings.initialSelectionMs = nowMs() - initialSelectionStartedAt;

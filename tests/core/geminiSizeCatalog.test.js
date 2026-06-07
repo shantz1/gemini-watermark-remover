@@ -126,10 +126,10 @@ test('matchOfficialGeminiImageSize should match documented Gemini 2.5 Flash Imag
     assert.equal(match.modelFamily, 'gemini-2.5-flash-image');
 });
 
-test('resolveOfficialGeminiWatermarkConfig should use 96px watermark for documented 1K portrait output', () => {
+test('resolveOfficialGeminiWatermarkConfig should prefer the current 48px watermark for documented Gemini 3.x 1K portrait output', () => {
     assert.deepEqual(
         resolveOfficialGeminiWatermarkConfig(768, 1376),
-        { logoSize: 96, marginRight: 64, marginBottom: 64 }
+        { logoSize: 48, marginRight: 32, marginBottom: 32 }
     );
 });
 
@@ -142,40 +142,41 @@ test('resolveOfficialGeminiSearchConfigs should map near-official portrait dimen
 
     assert.ok(configs.length > 0);
     assert.deepEqual(configs[0], {
-        logoSize: 125,
-        marginRight: 83,
-        marginBottom: 83
+        logoSize: 63,
+        marginRight: 42,
+        marginBottom: 42
     });
 });
 
 test('resolveGeminiWatermarkSearchConfigs should keep default config first and dedupe identical catalog matches', () => {
     const configs = resolveGeminiWatermarkSearchConfigs(768, 1376, {
-        logoSize: 96,
-        marginRight: 64,
-        marginBottom: 64
+        logoSize: 48,
+        marginRight: 32,
+        marginBottom: 32
     });
 
     assert.deepEqual(configs[0], {
-        logoSize: 96,
-        marginRight: 64,
-        marginBottom: 64
+        logoSize: 48,
+        marginRight: 32,
+        marginBottom: 32
     });
     assert.equal(
         configs.filter((config) => (
-            config.logoSize === 96 &&
-            config.marginRight === 64 &&
-            config.marginBottom === 64
+            config.logoSize === 48 &&
+            config.marginRight === 32 &&
+            config.marginBottom === 32
         )).length,
         1
     );
 });
 
-test('resolveOfficialGeminiSearchConfigs should keep canonical exact official dimensions first and add the 192px-margin variant', () => {
+test('resolveOfficialGeminiSearchConfigs should prefer current 48px exact official dimensions and keep legacy 96px gated fallback', () => {
     const configs = resolveOfficialGeminiSearchConfigs(768, 1376);
 
     assert.deepEqual(configs, [
+        { logoSize: 48, marginRight: 32, marginBottom: 32 },
+        { logoSize: 48, marginRight: 96, marginBottom: 96 },
         { logoSize: 96, marginRight: 64, marginBottom: 64 },
-        { logoSize: 96, marginRight: 192, marginBottom: 192, alphaVariant: '20260520' }
     ]);
 });
 
@@ -202,7 +203,10 @@ test('resolveOfficialGeminiWatermarkConfig should cover every documented portrai
 
     for (const entry of portraitEntries) {
         const config = resolveOfficialGeminiWatermarkConfig(entry.width, entry.height);
-        const expected = entry.resolutionTier === '0.5k'
+        const expected = entry.resolutionTier === '0.5k' || (
+            entry.modelFamily === 'gemini-3.x-image' &&
+            entry.resolutionTier === '1k'
+        )
             ? { logoSize: 48, marginRight: 32, marginBottom: 32 }
             : { logoSize: 96, marginRight: 64, marginBottom: 64 };
 

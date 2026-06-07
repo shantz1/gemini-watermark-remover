@@ -77,12 +77,12 @@ test('resolveInitialStandardConfig should switch to 96 config when 48 rule is mi
     assert.equal(resolved.marginBottom, 64);
 });
 
-test('detectWatermarkConfig should prefer 96 config for documented Gemini 1K sizes', () => {
+test('detectWatermarkConfig should prefer current 48 config for documented Gemini 3.x 1K sizes', () => {
     const config = detectWatermarkConfig(768, 1376);
 
-    assert.equal(config.logoSize, 96);
-    assert.equal(config.marginRight, 64);
-    assert.equal(config.marginBottom, 64);
+    assert.equal(config.logoSize, 48);
+    assert.equal(config.marginRight, 32);
+    assert.equal(config.marginBottom, 32);
 });
 
 test('resolveInitialStandardConfig should keep 48 config when it already matches', () => {
@@ -108,13 +108,13 @@ test('resolveInitialStandardConfig should keep 48 config when it already matches
     assert.equal(resolved.marginBottom, 32);
 });
 
-test('resolveInitialStandardConfig should promote near-official portrait previews to the catalog-sized anchor', () => {
+test('resolveInitialStandardConfig should promote near-official portrait previews to the current scaled catalog anchor', () => {
     const imageData = createImageData(1000, 1792, 16);
     const alpha48 = createSyntheticAlpha(48);
     const alpha96 = createSyntheticAlpha(96);
 
-    const trueConfig = { logoSize: 125, marginRight: 83, marginBottom: 83 };
-    applyWatermark(imageData, createSyntheticAlpha(125), calculateWatermarkPosition(imageData.width, imageData.height, trueConfig));
+    const trueConfig = { logoSize: 63, marginRight: 42, marginBottom: 42 };
+    applyWatermark(imageData, createSyntheticAlpha(63), calculateWatermarkPosition(imageData.width, imageData.height, trueConfig));
 
     const defaultConfig = detectWatermarkConfig(imageData.width, imageData.height);
     assert.equal(defaultConfig.logoSize, 48);
@@ -135,7 +135,7 @@ test('resolveInitialStandardConfig should keep the official config for exact off
     const alpha96 = createSyntheticAlpha(96);
 
     const officialConfig = detectWatermarkConfig(imageData.width, imageData.height);
-    assert.deepEqual(officialConfig, { logoSize: 96, marginRight: 64, marginBottom: 64 });
+    assert.deepEqual(officialConfig, { logoSize: 48, marginRight: 32, marginBottom: 32 });
 
     applyWatermark(
         imageData,
@@ -153,18 +153,18 @@ test('resolveInitialStandardConfig should keep the official config for exact off
     assert.deepEqual(resolved, officialConfig);
 });
 
-test('resolveInitialStandardConfig should allow exact official dimensions to fall back to 48 when evidence is materially stronger', () => {
+test('resolveInitialStandardConfig should allow exact official dimensions to promote legacy 96 when evidence is materially stronger', () => {
     const imageData = createImageData(1024, 1024, 16);
     const alpha48 = createSyntheticAlpha(48);
     const alpha96 = createSyntheticAlpha(96);
     const officialConfig = detectWatermarkConfig(imageData.width, imageData.height);
 
-    assert.deepEqual(officialConfig, { logoSize: 96, marginRight: 64, marginBottom: 64 });
+    assert.deepEqual(officialConfig, { logoSize: 48, marginRight: 32, marginBottom: 32 });
 
-    const strong48Config = { logoSize: 48, marginRight: 32, marginBottom: 32 };
+    const strong48Config = { logoSize: 96, marginRight: 64, marginBottom: 64 };
     applyWatermark(
         imageData,
-        alpha48,
+        alpha96,
         calculateWatermarkPosition(imageData.width, imageData.height, strong48Config)
     );
 

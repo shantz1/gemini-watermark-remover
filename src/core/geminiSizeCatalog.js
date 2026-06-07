@@ -10,6 +10,21 @@ const WATERMARK_CONFIG_BY_TIER = Object.freeze({
         alphaVariant: '20260520'
     })
 });
+const GEMINI_3X_CURRENT_1K_WATERMARK_CONFIG = Object.freeze({
+    logoSize: 48,
+    marginRight: 32,
+    marginBottom: 32
+});
+const GEMINI_3X_LEGACY_1K_WATERMARK_CONFIG = Object.freeze({
+    logoSize: 96,
+    marginRight: 64,
+    marginBottom: 64
+});
+const GEMINI_3X_CURRENT_1K_LARGE_MARGIN_WATERMARK_CONFIG = Object.freeze({
+    logoSize: 48,
+    marginRight: 96,
+    marginBottom: 96
+});
 
 // Gemini image generation does not emit arbitrary dimensions.
 // The models use a discrete set of official sizes, so the catalog is a better
@@ -108,9 +123,13 @@ const OFFICIAL_GEMINI_IMAGE_SIZES = Object.freeze([
     ])
 ]);
 
-const OFFICIAL_GEMINI_IMAGE_SIZE_INDEX = new Map(
-    OFFICIAL_GEMINI_IMAGE_SIZES.map((entry) => [`${entry.width}x${entry.height}`, entry])
-);
+const OFFICIAL_GEMINI_IMAGE_SIZE_INDEX = new Map();
+for (const entry of OFFICIAL_GEMINI_IMAGE_SIZES) {
+    const key = `${entry.width}x${entry.height}`;
+    if (!OFFICIAL_GEMINI_IMAGE_SIZE_INDEX.has(key)) {
+        OFFICIAL_GEMINI_IMAGE_SIZE_INDEX.set(key, entry);
+    }
+}
 
 function normalizeDimension(value) {
     const numeric = Number(value);
@@ -124,7 +143,18 @@ function clamp(value, min, max) {
 }
 
 function getEntryConfig(entry) {
+    if (entry?.modelFamily === 'gemini-3.x-image' && entry.resolutionTier === '1k') {
+        return GEMINI_3X_CURRENT_1K_WATERMARK_CONFIG;
+    }
     return WATERMARK_CONFIG_BY_TIER[entry.resolutionTier] ?? null;
+}
+
+function getEntryLegacyConfigs(entry) {
+    if (entry?.modelFamily === 'gemini-3.x-image' && entry.resolutionTier === '1k') {
+        return [GEMINI_3X_LEGACY_1K_WATERMARK_CONFIG];
+    }
+
+    return [];
 }
 
 function buildConfigKey(config) {
@@ -141,6 +171,16 @@ function createNewMarginVariantConfig(baseConfig, width, height) {
         marginBottom: 192,
         alphaVariant: '20260520'
     };
+    const x = width - config.marginRight - config.logoSize;
+    const y = height - config.marginBottom - config.logoSize;
+    return x >= 0 && y >= 0 ? config : null;
+}
+
+function createCurrentLargeMarginVariantConfig(baseConfig, width, height, { allowAnyBase = false } = {}) {
+    if (!allowAnyBase && (!baseConfig || baseConfig.logoSize !== 48)) return null;
+    if (baseConfig?.marginRight === 96 && baseConfig?.marginBottom === 96) return null;
+
+    const config = { ...GEMINI_3X_CURRENT_1K_LARGE_MARGIN_WATERMARK_CONFIG };
     const x = width - config.marginRight - config.logoSize;
     const y = height - config.marginBottom - config.logoSize;
     return x >= 0 && y >= 0 ? config : null;
@@ -185,13 +225,30 @@ export function resolveOfficialGeminiSearchConfigs(
     );
     if (exactOfficialConfig) {
         const configs = [{ ...exactOfficialConfig }];
-        const newMarginVariant = createNewMarginVariantConfig(
-            exactOfficialConfig,
-            normalizedWidth,
-            normalizedHeight
-        );
-        if (newMarginVariant) {
-            configs.push(newMarginVariant);
+        const match = matchOfficialGeminiImageSize(normalizedWidth, normalizedHeight);
+        if (match?.modelFamily === 'gemini-3.x-image' && match.resolutionTier === '1k') {
+            const currentLargeMarginVariant = createCurrentLargeMarginVariantConfig(
+                exactOfficialConfig,
+                normalizedWidth,
+                normalizedHeight
+            );
+            if (currentLargeMarginVariant) {
+                configs.push(currentLargeMarginVariant);
+            }
+        }
+        for (const legacyConfig of getEntryLegacyConfigs(match)) {
+            configs.push({ ...legacyConfig });
+        }
+
+        if (!(match?.modelFamily === 'gemini-3.x-image' && match.resolutionTier === '1k')) {
+            const newMarginVariant = createNewMarginVariantConfig(
+                exactOfficialConfig,
+                normalizedWidth,
+                normalizedHeight
+            );
+            if (newMarginVariant) {
+                configs.push(newMarginVariant);
+            }
         }
         return configs;
     }
@@ -255,6 +312,18 @@ export function resolveGeminiWatermarkSearchConfigs(width, height, defaultConfig
         configs.push(defaultConfig);
     }
     configs.push(...resolveOfficialGeminiSearchConfigs(width, height));
+    const currentLargeMarginVariant = createCurrentLargeMarginVariantConfig(defaultConfig, width, height);
+    if (currentLargeMarginVariant) {
+        configs.push(currentLargeMarginVariant);
+    }
+    if (!isOfficialOrKnownGeminiDimensions(width, height)) {
+        const unknownSizeCurrentLargeMarginVariant = createCurrentLargeMarginVariantConfig(defaultConfig, width, height, {
+            allowAnyBase: true
+        });
+        if (unknownSizeCurrentLargeMarginVariant) {
+            configs.push(unknownSizeCurrentLargeMarginVariant);
+        }
+    }
 
     const deduped = [];
     const seen = new Set();

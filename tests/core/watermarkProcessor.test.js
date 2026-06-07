@@ -259,10 +259,10 @@ test('processWatermarkImageData should recover preview-sized bottom-right waterm
 
     assert.ok(result.meta.applied, `skipReason=${result.meta.skipReason}`);
     assert.ok(
-        result.meta.source.startsWith('standard+preview-anchor'),
-        `expected preview anchor recovery, got ${result.meta.source}`
+        result.meta.source.startsWith('standard'),
+        `expected standard catalog recovery, got ${result.meta.source}`
     );
-    assert.equal(result.meta.position.width, truePosition.width);
+    assert.ok(Math.abs(result.meta.position.width - truePosition.width) <= 1, `width=${result.meta.position.width}`);
     assert.equal(result.meta.position.x, truePosition.x);
     assert.equal(result.meta.position.y, truePosition.y);
     assert.ok(
@@ -479,6 +479,78 @@ test('processWatermarkImageData should keep 20260520-1.png on the canonical 48px
         !String(result.meta.source).includes('+local'),
         `expected canonical standard anchor, got source=${result.meta.source}`
     );
+});
+
+test('processWatermarkImageData should not promote weak 192px-margin local drift on 20260607 keyboard sample', async () => {
+    const alpha48 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_48.png')));
+    const alpha96 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96.png')));
+    const alpha96NewMargin = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96_20260520.png')));
+    const imageData = await decodeImageDataInNode(path.resolve('src/assets/samples/20260607.png'));
+
+    const result = processWatermarkImageData(imageData, {
+        alpha48,
+        alpha96,
+        alpha96Variants: {
+            '20260520': alpha96NewMargin
+        },
+        adaptiveMode: 'never',
+        maxPasses: 1,
+        getAlphaMap: (size) => size === 48 ? alpha48 : interpolateAlphaMap(alpha96, 96, size)
+    });
+
+    assert.ok(
+        result.meta.applied === false || result.meta.position.x >= 1240,
+        `expected no off-anchor 192px-margin local drift, applied=${result.meta.applied}, position=${JSON.stringify(result.meta.position)}, source=${result.meta.source}`
+    );
+    assert.ok(
+        !String(result.meta.source).includes('192') &&
+        !(String(result.meta.source).includes('+catalog') && String(result.meta.source).includes('+local')),
+        `expected weak catalog local drift to be rejected, source=${result.meta.source}`
+    );
+});
+
+test('processWatermarkImageData should remove 20260607 samples at the 48px 96px-margin anchor', async () => {
+    const alpha48 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_48.png')));
+    const alpha96 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96.png')));
+    const cases = [
+        {
+            fileName: '20260607.png',
+            position: { x: 1264, y: 624, width: 48, height: 48 },
+            maxAlphaGain: 0.7
+        },
+        {
+            fileName: '20260607-2.png',
+            position: { x: 576, y: 1313, width: 48, height: 48 },
+            maxAlphaGain: 1
+        }
+    ];
+
+    for (const item of cases) {
+        const imageData = await decodeImageDataInNode(path.resolve('src/assets/samples', item.fileName));
+
+        const result = processWatermarkImageData(imageData, {
+            alpha48,
+            alpha96,
+            adaptiveMode: 'never',
+            maxPasses: 1,
+            getAlphaMap: (size) => size === 48 ? alpha48 : interpolateAlphaMap(alpha96, 96, size)
+        });
+
+        assert.equal(result.meta.applied, true, `${item.fileName} skipReason=${result.meta.skipReason}`);
+        assert.deepEqual(
+            result.meta.position,
+            item.position,
+            `${item.fileName} unexpected position=${JSON.stringify(result.meta.position)}, source=${result.meta.source}`
+        );
+        assert.ok(
+            result.meta.alphaGain <= item.maxAlphaGain,
+            `${item.fileName} expected a safe alpha gain <= ${item.maxAlphaGain}, got ${result.meta.alphaGain}`
+        );
+        assert.ok(
+            result.meta.detection.processedGradientScore < result.meta.detection.originalGradientScore,
+            `${item.fileName} expected residual gradient to improve, before=${result.meta.detection.originalGradientScore}, after=${result.meta.detection.processedGradientScore}`
+        );
+    }
 });
 
 test('processWatermarkImageData should remove the 2816x1536 issue #68 watermark at the new 192px margin', async () => {

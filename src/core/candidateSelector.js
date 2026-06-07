@@ -91,6 +91,18 @@ function mergeCandidateProvenance(...provenanceParts) {
     return Object.keys(merged).length > 0 ? merged : null;
 }
 
+function isProjectedPreviewCatalogConfig(originalImageData, candidateConfig, baseConfig) {
+    if (!originalImageData || !candidateConfig) return false;
+    if (matchOfficialGeminiImageSize(originalImageData.width, originalImageData.height)) return false;
+
+    return candidateConfig.logoSize < 48 ||
+        (
+            candidateConfig.logoSize <= 48 &&
+            candidateConfig.marginRight < 32 &&
+            candidateConfig.marginBottom < 32
+        );
+}
+
 function buildStandardCandidateSeeds({
     originalImageData,
     config,
@@ -138,13 +150,22 @@ function buildStandardCandidateSeeds({
         });
         if (!alphaMap) continue;
 
+        const projectedPreviewCatalog = isProjectedPreviewCatalogConfig(
+            originalImageData,
+            candidateConfig,
+            config
+        );
+
         seeds.push({
             config: candidateConfig,
             position: candidatePosition,
             alphaMap,
-            source: candidateConfig === config ? 'standard' : 'standard+catalog',
+            source: projectedPreviewCatalog
+                ? 'standard+preview-anchor'
+                : (candidateConfig === config ? 'standard' : 'standard+catalog'),
             provenance: mergeCandidateProvenance(
                 candidateConfig === config ? null : { catalogVariant: true },
+                projectedPreviewCatalog ? { previewAnchor: true } : null,
                 candidateConfig.alphaVariant ? { alphaVariant: candidateConfig.alphaVariant } : null
             )
         });
@@ -232,6 +253,80 @@ function isPreviewAnchorGainSearchRequired(candidate) {
 
     return Math.abs(candidate.processedSpatialScore) > PREVIEW_ANCHOR_GAIN_SKIP_RESIDUAL_THRESHOLD ||
         Math.max(0, candidate.processedGradientScore) > PREVIEW_ANCHOR_GAIN_SKIP_GRADIENT_THRESHOLD;
+}
+
+function isCleanStandardAlphaCandidate(candidate) {
+    if (!candidate?.accepted) return false;
+
+    return Math.abs(candidate.processedSpatialScore) <= STANDARD_FAST_PATH_RESIDUAL_THRESHOLD &&
+        Math.max(0, candidate.processedGradientScore) <= STANDARD_FAST_PATH_GRADIENT_THRESHOLD;
+}
+
+function normalizeAlphaPriorityGains(alphaPriorityGains) {
+    const gains = Array.isArray(alphaPriorityGains) && alphaPriorityGains.length > 0
+        ? alphaPriorityGains
+        : [1];
+    const normalized = [];
+    const seen = new Set();
+    for (const gain of gains) {
+        if (!Number.isFinite(gain) || gain <= 0) continue;
+        const key = gain.toFixed(4);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        normalized.push(gain);
+    }
+
+    if (!seen.has('1.0000')) {
+        normalized.push(1);
+    }
+
+    return normalized;
+}
+
+function isWeakAlphaPrioritySeed(seed) {
+    return seed?.config?.logoSize === 48 &&
+        seed.config.marginRight === 96 &&
+        seed.config.marginBottom === 96;
+}
+
+function evaluateStandardTrialForSeed({
+    originalImageData,
+    seed,
+    alphaPriorityGains
+}) {
+    const priorityGains = normalizeAlphaPriorityGains(alphaPriorityGains);
+    let fallbackTrial = null;
+    let bestAcceptedTrial = null;
+
+    for (const alphaGain of priorityGains) {
+        const trial = evaluateRestorationCandidate({
+            originalImageData,
+            alphaMap: seed.alphaMap,
+            position: seed.position,
+            source: alphaGain === 1 ? seed.source : `${seed.source}+gain`,
+            config: seed.config,
+            baselineNearBlackRatio: calculateNearBlackRatio(originalImageData, seed.position),
+            alphaGain,
+            provenance: seed.provenance,
+            includeImageData: false
+        });
+        if (!trial) continue;
+
+        if (alphaGain === 1 || !fallbackTrial) {
+            fallbackTrial = trial;
+        }
+        if (alphaGain < 1) {
+            if (isWeakAlphaPrioritySeed(seed) && isCleanStandardAlphaCandidate(trial)) {
+                return trial;
+            }
+            continue;
+        }
+        if (trial.accepted) {
+            bestAcceptedTrial = pickBetterCandidate(bestAcceptedTrial, trial, 0.002);
+        }
+    }
+
+    return bestAcceptedTrial ?? fallbackTrial;
 }
 
 export function evaluateRestorationCandidate({
@@ -809,7 +904,7 @@ function searchCandidateAlphaGain({
 
     let bestCandidate = null;
     for (const candidateGain of alphaGainCandidates) {
-        if (!Number.isFinite(candidateGain) || candidateGain <= 1) continue;
+        if (!Number.isFinite(candidateGain) || candidateGain <= 0 || candidateGain === 1) continue;
 
         const candidate = evaluateRestorationCandidate({
             originalImageData,
@@ -825,10 +920,66 @@ function searchCandidateAlphaGain({
         });
 
         if (!candidate?.accepted) continue;
+        if (
+            candidateGain < 1 &&
+            (
+                candidate.improvement < STANDARD_PRESERVE_MIN_IMPROVEMENT ||
+                Math.abs(candidate.processedSpatialScore) > VALIDATION_TARGET_RESIDUAL
+            )
+        ) {
+            continue;
+        }
         bestCandidate = pickBetterCandidate(bestCandidate, candidate, 0.002);
     }
 
     return bestCandidate;
+}
+
+function searchStrongStandardTrialAlphaGain({
+    originalImageData,
+    standardTrials,
+    standardTrial,
+    baseCandidate,
+    baseDecisionTier,
+    alphaGainCandidates
+}) {
+    let nextBaseCandidate = baseCandidate;
+    let nextBaseDecisionTier = baseDecisionTier;
+
+    for (const candidate of standardTrials) {
+        if (!candidate || candidate.accepted) continue;
+        if (candidate === standardTrial && nextBaseCandidate) continue;
+
+        const reliableMatch = hasReliableStandardWatermarkSignal({
+            spatialScore: candidate.originalSpatialScore,
+            gradientScore: candidate.originalGradientScore
+        });
+        if (!reliableMatch) continue;
+
+        const gainedCandidate = searchCandidateAlphaGain({
+            originalImageData,
+            seedCandidate: {
+                ...candidate,
+                source: `${candidate.source}+validated`
+            },
+            adaptiveConfidence: null,
+            alphaGainCandidates
+        });
+        if (!gainedCandidate) continue;
+
+        ({
+            baseCandidate: nextBaseCandidate,
+            baseDecisionTier: nextBaseDecisionTier
+        } = promoteBaseCandidate(nextBaseCandidate, nextBaseDecisionTier, gainedCandidate, {
+            reliableMatch,
+            minCostDelta: 0.002
+        }));
+    }
+
+    return {
+        baseCandidate: nextBaseCandidate,
+        baseDecisionTier: nextBaseDecisionTier
+    };
 }
 
 function insertTopPreviewCandidate(topCandidates, candidate) {
@@ -971,18 +1122,14 @@ function searchBottomRightPreviewCandidate({
 
 function evaluateStandardTrialsForSeeds({
     originalImageData,
-    candidateSeeds
+    candidateSeeds,
+    alphaPriorityGains = [1]
 }) {
     const standardTrials = candidateSeeds
-        .map((seed) => evaluateRestorationCandidate({
+        .map((seed) => evaluateStandardTrialForSeed({
             originalImageData,
-            alphaMap: seed.alphaMap,
-            position: seed.position,
-            source: seed.source,
-            config: seed.config,
-            baselineNearBlackRatio: calculateNearBlackRatio(originalImageData, seed.position),
-            provenance: seed.provenance,
-            includeImageData: false
+            seed,
+            alphaPriorityGains
         }))
         .filter(Boolean);
     const standardTrial = standardTrials.find((candidate) => candidate.source === 'standard') ?? standardTrials[0] ?? null;
@@ -1010,7 +1157,8 @@ function resolveStandardAnchorSelection({
     alpha96,
     alpha96Variants,
     getAlphaMap,
-    resolveAlphaMap
+    resolveAlphaMap,
+    alphaPriorityGains
 }) {
     let standardCandidateSeeds = buildStandardCandidateSeeds({
         originalImageData,
@@ -1025,7 +1173,8 @@ function resolveStandardAnchorSelection({
     });
     let standardSelection = evaluateStandardTrialsForSeeds({
         originalImageData,
-        candidateSeeds: standardCandidateSeeds
+        candidateSeeds: standardCandidateSeeds,
+        alphaPriorityGains
     });
 
     const shouldExpandStandardCatalog =
@@ -1046,7 +1195,8 @@ function resolveStandardAnchorSelection({
         });
         standardSelection = evaluateStandardTrialsForSeeds({
             originalImageData,
-            candidateSeeds: standardCandidateSeeds
+            candidateSeeds: standardCandidateSeeds,
+            alphaPriorityGains
         });
     }
 
@@ -1238,6 +1388,7 @@ function refineSelectedAnchorCandidate({
     let bestGainTrial = selectedTrial;
     if (shouldRunGainSearch) {
         for (const candidateGain of alphaGainCandidates) {
+            if (!Number.isFinite(candidateGain) || candidateGain <= 1) continue;
             const gainTrial = evaluateRestorationCandidate({
                 originalImageData,
                 alphaMap,
@@ -1283,6 +1434,7 @@ export function selectInitialCandidate({
     getAlphaMap,
     allowAdaptiveSearch,
     alphaGainCandidates,
+    alphaPriorityGains = [1],
     alpha96Variants = null
 }) {
     const resolveAlphaMap = createAlphaMapResolver({ alpha48, alpha96, getAlphaMap });
@@ -1302,7 +1454,8 @@ export function selectInitialCandidate({
         alpha96,
         alpha96Variants,
         getAlphaMap,
-        resolveAlphaMap
+        resolveAlphaMap,
+        alphaPriorityGains
     });
     let baseCandidate = null;
     let baseDecisionTier = 'insufficient';
@@ -1315,27 +1468,6 @@ export function selectInitialCandidate({
             source: `${standardTrial.source}+validated`
         };
         baseDecisionTier = 'validated-match';
-    }
-
-    if (
-        !baseCandidate &&
-        standardTrial &&
-        hasReliableStandardMatch
-    ) {
-        const adaptiveConfidence = null;
-        const gainedStandardCandidate = searchCandidateAlphaGain({
-            originalImageData,
-            seedCandidate: {
-                ...standardTrial,
-                source: 'standard+validated'
-            },
-            adaptiveConfidence,
-            alphaGainCandidates
-        });
-        if (gainedStandardCandidate) {
-            baseCandidate = gainedStandardCandidate;
-            baseDecisionTier = 'validated-match';
-        }
     }
 
     let adaptive = null;
@@ -1353,6 +1485,18 @@ export function selectInitialCandidate({
             })
         }));
     }
+
+    ({
+        baseCandidate,
+        baseDecisionTier
+    } = searchStrongStandardTrialAlphaGain({
+        originalImageData,
+        standardTrials,
+        standardTrial,
+        baseCandidate,
+        baseDecisionTier,
+        alphaGainCandidates
+    }));
 
     const previewAnchorCandidate = searchBottomRightPreviewCandidate({
         originalImageData,

@@ -61,7 +61,10 @@ test('listBenchmarkSampleAssets should include every primary sample image under 
     const items = await listBenchmarkSampleAssets(sampleDir);
 
     assert.ok(items.length > 0, 'expected benchmark sample enumeration to find sample images');
-    assert.ok(items.every((item) => item.expectedGemini === true), 'expected directory-driven samples to be treated as Gemini fixtures');
+    assert.ok(
+        items.every((item) => item.expectedGemini === true),
+        'expected directory-driven samples to be treated as Gemini fixtures'
+    );
     assert.ok(items.every((item) => !item.fileName.includes('-fix.')), 'expected fix snapshots to be excluded');
     assert.ok(items.every((item) => !item.fileName.includes('-after.')), 'expected derived after snapshots to be excluded');
     assert.equal(items.some((item) => item.fileName === '1-1.webp'), true);
