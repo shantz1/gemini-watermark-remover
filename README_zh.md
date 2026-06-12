@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://geminiwatermarkremover.io/"><img src="https://img.shields.io/badge/🛠️_在线工具-geminiwatermarkremover.io-blue?style=for-the-badge" alt="在线工具"></a>&nbsp;
+  <a href="https://geminiwatermarkremover.io/video"><img src="https://img.shields.io/badge/🎬_视频去水印-New!-ff6b6b?style=for-the-badge" alt="视频去水印"></a>&nbsp;
   <a href="https://chromewebstore.google.com/detail/gemini-watermark-remover/cjlmnfcfnofnglkphbcdclbpimdjkmdf"><img src="https://img.shields.io/badge/🧩_Chrome插件-安装-blueviolet?style=for-the-badge" alt="Chrome 插件"></a>&nbsp;
   <a href="https://geminiwatermarkremover.io/userscript/gemini-watermark-remover.user.js"><img src="https://img.shields.io/badge/🐒_油猴脚本-安装-green?style=for-the-badge" alt="油猴脚本"></a>&nbsp;
   <a href="https://pilio.ai/image-watermark-remover"><img src="https://img.shields.io/badge/🧹_通用去水印-pilio.ai-gray?style=for-the-badge" alt="通用去水印"></a>
@@ -27,6 +28,7 @@
 - ✅ **数学精确** - 基于反向 Alpha 混合算法，而非 AI 修复模型
 - ✅ **自动检测** - 基于 Gemini 已知输出尺寸目录和局部锚点搜索，自动识别水印大小与位置
 - ✅ **灵活使用** - 在线工具快速上手、Chrome 插件或油猴脚本无缝集成 Gemini 页面、CLI 和 Skill 支持脚本化与自动化
+- ✅ **视频支持** - 支持去除 Gemini 生成视频中的水印，访问 [geminiwatermarkremover.io/video](https://geminiwatermarkremover.io/video) 即可使用
 - ✅ **跨平台** - 支持现代浏览器（Chrome、Firefox、Safari、Edge）和 Node.js 环境
 
 ## Gemini 去水印效果示例
@@ -65,6 +67,17 @@
 2. 拖拽或点击选择带水印的 Gemini 图片
 3. 图片会自动开始处理，移除水印
 4. 下载处理后的图片
+
+### 在线视频去水印工具（新功能！）
+
+针对带有可见水印的 Gemini 生成**视频**：
+
+1. 浏览器打开 **[geminiwatermarkremover.io/video](https://geminiwatermarkremover.io/video)**
+2. 拖拽或点击选择带水印的 Gemini 生成视频
+3. 工具会自动检测并去除视频中的水印
+4. 下载处理后的视频
+
+> **说明**：视频去水印处理完全在浏览器本地完成，不会上传任何文件到服务器。
 
 ### Chrome 插件
 
@@ -371,6 +384,7 @@ gemini-watermark-remover/
 ## 局限性
 
 - 只去除了 **Gemini 可见的水印**<small>（即右下角的半透明 Logo）</small>
+- 同时支持**图片**和**视频**水印去除 — 视频处理请使用[在线工具](https://geminiwatermarkremover.io/video)
 - 无法去除隐形或隐写水印。<small>[（了解更多关于 SynthID 的信息）](https://support.google.com/gemini/answer/16722517)</small>
 - 针对 Gemini 当前的可见水印模式设计<small>（本仓库验证范围截至 2026 年 4 月）</small>
 

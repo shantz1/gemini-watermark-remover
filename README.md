@@ -12,6 +12,7 @@ An open-source tool to **remove Gemini watermarks** from AI-generated images wit
 
 <p align="center">
   <a href="https://geminiwatermarkremover.io/"><img src="https://img.shields.io/badge/🛠️_Online_Tool-geminiwatermarkremover.io-blue?style=for-the-badge" alt="Online Tool"></a>&nbsp;
+  <a href="https://geminiwatermarkremover.io/video"><img src="https://img.shields.io/badge/🎬_Video_Remover-New!-ff6b6b?style=for-the-badge" alt="Video Watermark Remover"></a>&nbsp;
   <a href="https://chromewebstore.google.com/detail/gemini-watermark-remover/cjlmnfcfnofnglkphbcdclbpimdjkmdf"><img src="https://img.shields.io/badge/🧩_Chrome_Extension-Install-blueviolet?style=for-the-badge" alt="Chrome Extension"></a>&nbsp;
   <a href="https://geminiwatermarkremover.io/userscript/gemini-watermark-remover.user.js"><img src="https://img.shields.io/badge/🐒_Userscript-Install-green?style=for-the-badge" alt="Userscript"></a>&nbsp;
   <a href="https://pilio.ai/image-watermark-remover"><img src="https://img.shields.io/badge/🧹_General_Remover-pilio.ai-gray?style=for-the-badge" alt="General Watermark Remover"></a>
@@ -27,6 +28,7 @@ An open-source tool to **remove Gemini watermarks** from AI-generated images wit
 - ✅ **Mathematical Precision** - Based on the Reverse Alpha Blending formula, not "hallucinating" AI models.
 - ✅ **Auto-Detection** - Automatically identifies watermark size and position using Gemini's known output catalog and local anchor search.
 - ✅ **Flexible Usage** - Online tool for quick use, Chrome extension or userscript for seamless Gemini page integration, CLI and Skill for scripting and automation.
+- ✅ **Video Support** - Remove watermarks from Gemini-generated videos at [geminiwatermarkremover.io/video](https://geminiwatermarkremover.io/video).
 - ✅ **Cross-Platform** - Works in modern browsers (Chrome, Firefox, Safari, Edge) and Node.js environments.
 
 ## Gemini Watermark Removal Examples
@@ -65,6 +67,17 @@ For all users — the fastest and easiest way to remove Gemini watermarks from i
 2. Drag and drop or click to select your Gemini-generated image.
 3. The engine will automatically process and remove the watermark.
 4. Download the cleaned image.
+
+### Online Video Watermark Remover (New!)
+
+For Gemini-generated **videos** with visible watermarks:
+
+1. Open **[geminiwatermarkremover.io/video](https://geminiwatermarkremover.io/video)**.
+2. Upload or drag-and-drop your Gemini-generated video.
+3. The tool will automatically detect and remove the watermark from the video.
+4. Download the cleaned video.
+
+> **Note**: Video watermark removal runs entirely in your browser — no files are uploaded to any server.
 
 ### Chrome Extension
 
@@ -371,6 +384,7 @@ gemini-watermark-remover/
 ## Limitations
 
 - Only removes **Gemini visible watermarks** <small>(the semi-transparent logo in bottom-right)</small>
+- Supports both **image** and **video** watermark removal — video processing is available via the [online tool](https://geminiwatermarkremover.io/video)
 - Does not remove invisible/steganographic watermarks. <small>[(Learn more about SynthID)](https://support.google.com/gemini/answer/16722517)</small>
 - Designed for Gemini's current visible watermark pattern <small>(validated against this repo through April 2026)</small>
 

@@ -32,8 +32,8 @@ const ALLENK_FDNCNN_WASM_PATHS = Object.freeze({
     wasm: './onnxruntime/ort-wasm-simd-threaded.wasm'
 });
 const ALLENK_FDNCNN_WEBGPU_WASM_PATHS = Object.freeze({
-    mjs: './onnxruntime/ort-wasm-simd-threaded.jsep.mjs',
-    wasm: './onnxruntime/ort-wasm-simd-threaded.jsep.wasm'
+    mjs: './onnxruntime/ort-wasm-simd-threaded.asyncify.mjs',
+    wasm: './onnxruntime/ort-wasm-simd-threaded.asyncify.wasm'
 });
 const ALLENK_FDNCNN_INPUT_SHAPE = Object.freeze([1, 4, 200, 200]);
 const ALLENK_FDNCNN_OUTPUT_SHAPE = Object.freeze([1, 3, 200, 200]);
@@ -558,9 +558,7 @@ async function runExport() {
                 } else if (phase === 'export') {
                     const exportProgress = 0.12 + progress * 0.88;
                     const frames = Number.isFinite(processedFrames) ? `${processedFrames} 帧` : '处理中';
-                    const aiNote = Number.isFinite(aiDenoiseFrames) && Number.isFinite(aiReuseFrames)
-                        ? `，AI 推理 ${aiDenoiseFrames} 帧，复用 ${aiReuseFrames} 帧`
-                        : '';
+                    const aiNote = '';
                     setProgress(exportProgress, `导出中 ${frames}`);
                     setStatus(`正在导出视频，已处理 ${frames}${aiNote}。`);
                 }
@@ -584,10 +582,8 @@ async function runExport() {
         const cleanupNote = result.denoiseBackend === VIDEO_DENOISE_BACKENDS.ALLENK_FDNCNN_BROWSER_SPIKE
             ? 'AI 去水印已完成'
             : '去水印已完成';
-        const aiNote = result.denoiseBackend === VIDEO_DENOISE_BACKENDS.ALLENK_FDNCNN_BROWSER_SPIKE
-            ? `AI 推理 ${result.aiDenoiseFrames || 0} 帧，复用 ${result.aiReuseFrames || 0} 帧。`
-            : '';
-        setStatus(`${cleanupNote}，已处理 ${result.processedFrames} 帧。${aiNote}${audioNote}`, 'success');
+        const aiNote = '';
+        setStatus(`${cleanupNote}，已处理 ${result.processedFrames} 帧。${audioNote}`, 'success');
     } catch (error) {
         console.error(error);
         setStatus(error.message || '导出失败', 'error');

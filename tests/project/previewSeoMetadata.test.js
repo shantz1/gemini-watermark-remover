@@ -32,6 +32,14 @@ test('internal dev preview page should retain the browser preview app entry', as
     assert.match(html, /<script\s+src="app\.js"><\/script>/i);
 });
 
+test('internal dev preview page should not depend on external Tailwind CDN', async () => {
+    const html = await readText('public/dev-preview.html');
+
+    assert.doesNotMatch(html, /cdn\.tailwindcss\.com/i);
+    assert.doesNotMatch(html, /\btailwind\.config\b/i);
+    assert.match(html, /href="dev-preview\.css"/i);
+});
+
 test('internal dev preview page should be slimmed down to a single-image harness', async () => {
     const html = await readText('public/dev-preview.html');
 

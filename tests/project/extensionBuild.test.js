@@ -59,6 +59,7 @@ test('production build should emit a MV3 extension that packages the shared user
   assert.equal(existsSync(new URL('../../dist/extension/assets/logo-shape.svg', import.meta.url)), true);
   assert.equal(existsSync(new URL('../../dist/extension/assets/github.svg', import.meta.url)), true);
   assert.equal(existsSync(new URL('../../dist/extension-local', import.meta.url)), false);
+  assert.equal(existsSync(new URL('../../dist/releases', import.meta.url)), false);
 
   const contentMain = await readText('dist/extension/content-main.js');
   assert.match(contentMain, /Gemini Watermark Remover/);

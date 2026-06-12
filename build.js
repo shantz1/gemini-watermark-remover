@@ -147,7 +147,6 @@ function copyExtensionStaticAssets(outputDir = EXTENSION_DIR) {
 
 function cleanDistBuildOutputs() {
   if (!existsSync('dist')) return;
-  const preservedReleasesDir = join('dist', 'releases');
   for (const entry of [
     'app.js',
     'dev-preview.html',
@@ -164,7 +163,6 @@ function cleanDistBuildOutputs() {
     const target = join('dist', entry);
     if (existsSync(target)) rmSync(target, { recursive: true });
   }
-  mkdirSync(preservedReleasesDir, { recursive: true });
 }
 
 const copyAssetsPlugin = {

@@ -18,7 +18,7 @@
 html,
 body {
   margin: 0;
-  min-width: 420px;
+  min-width: 380px;
   background: var(--surface);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -28,7 +28,7 @@ body {
 .popup {
   box-sizing: border-box;
   margin: 0;
-  padding: 20px 20px 18px;
+  padding: 16px 16px 14px;
   border: 0;
   border-radius: 0;
   background: var(--surface);
@@ -38,9 +38,9 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
-  padding: 0 4px 18px;
+  padding: 0 4px 14px;
 }
 
 .brand-copy {
@@ -51,7 +51,7 @@ body {
 
 .brand-name {
   overflow: hidden;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.25;
   color: var(--text);
@@ -71,26 +71,26 @@ body {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--panel);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .logo-wrap img {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .setting-group {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px 14px;
   border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--panel);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
@@ -101,7 +101,7 @@ body {
 }
 
 .setting-title {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
   color: var(--text);
@@ -166,22 +166,22 @@ body {
 
 .quick-links {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .link-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 62px;
-  padding: 15px 16px;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
   border: 1px solid rgba(0, 0, 0, 0.05);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--panel-soft);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
   color: var(--text);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   line-height: 1.4;
   text-decoration: none;
@@ -231,16 +231,16 @@ body {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   background: var(--accent-tint-strong);
   color: var(--accent);
 }
 
 .feature-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -249,8 +249,8 @@ body {
 }
 
 .feature-icon-toggle {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
 }
 
 .feature-icon-site {
@@ -259,10 +259,13 @@ body {
 .feature-icon-ai {
 }
 
+.feature-icon-video {
+}
+
 .link-copy {
   display: grid;
   flex: 1 1 auto;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -287,13 +290,13 @@ body {
 }
 
 .link-title {
-  font-size: 13.25px;
+  font-size: 12.5px;
   line-height: 1.25;
 }
 
 .link-note {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 450;
   line-height: 1.4;
 }
@@ -304,8 +307,8 @@ body {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.05);
   color: var(--muted);
   font-size: 12px;
