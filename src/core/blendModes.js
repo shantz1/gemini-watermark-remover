@@ -37,11 +37,16 @@ export function removeWatermark(imageData, alphaMap, position, options = {}) {
             // Calculate index in alpha map
             const alphaIdx = row * width + col;
 
-            // Get alpha value
+            // Get alpha value. A negative alpha map marks a dark-polarity
+            // watermark: same opacity mask, black logo value.
             const rawAlpha = alphaMap[alphaIdx];
+            const alphaMagnitude = Math.abs(rawAlpha);
+            const logoValue = Number.isFinite(options.logoValue)
+                ? options.logoValue
+                : (rawAlpha < 0 ? 0 : LOGO_VALUE);
 
             // Remove low-level alpha noise from compressed background capture.
-            const signalAlpha = Math.max(0, rawAlpha - ALPHA_NOISE_FLOOR) * alphaGain;
+            const signalAlpha = Math.max(0, alphaMagnitude - ALPHA_NOISE_FLOOR) * alphaGain;
 
             // Skip very small alpha values (noise)
             if (signalAlpha < ALPHA_THRESHOLD) {
@@ -49,7 +54,7 @@ export function removeWatermark(imageData, alphaMap, position, options = {}) {
             }
 
             // Use original alpha for inverse solve; use denoised alpha as activation signal.
-            const alpha = Math.min(rawAlpha * alphaGain, MAX_ALPHA);
+            const alpha = Math.min(alphaMagnitude * alphaGain, MAX_ALPHA);
             const oneMinusAlpha = 1.0 - alpha;
 
             // Apply reverse alpha blending to each RGB channel
@@ -57,7 +62,7 @@ export function removeWatermark(imageData, alphaMap, position, options = {}) {
                 const watermarked = imageData.data[imgIdx + c];
 
                 // Reverse alpha blending formula
-                const original = (watermarked - alpha * LOGO_VALUE) / oneMinusAlpha;
+                const original = (watermarked - alpha * logoValue) / oneMinusAlpha;
 
                 // Clip to [0, 255] range
                 imageData.data[imgIdx + c] = Math.max(0, Math.min(255, Math.round(original)));

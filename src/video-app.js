@@ -14,9 +14,15 @@ import {
 } from './video/videoExport.js';
 import { isReferenceGeminiVideoSize } from './video/videoWatermarkCatalog.js';
 import {
-    getRelocatedReviewPresetConfig,
-    shouldUseRelocatedReviewPreset
+    getAutomaticVideoPresetConfig,
+    getRelocatedReviewPresetConfig
 } from './video/videoPresetPolicy.js';
+import {
+    consumeDebugFileHandoff,
+    getDebugFileKind,
+    pickDebugUploadFile,
+    saveDebugFileHandoff
+} from './shared/debugFileHandoff.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,12 +33,18 @@ const state = {
     metadata: null,
     detection: null,
     running: false,
-    jobId: 0
+    jobId: 0,
+    syncingPlayback: false
 };
 
 const els = {
     dropzone: $('dropzone'),
     fileInput: $('fileInput'),
+    comparePlayer: $('comparePlayer'),
+    afterBadge: $('afterBadge'),
+    playPauseBtn: $('playPauseBtn'),
+    scrubber: $('scrubber'),
+    timeLabel: $('timeLabel'),
     originalVideo: $('originalVideo'),
     processedVideo: $('processedVideo'),
     originalEmpty: $('originalEmpty'),
@@ -54,6 +66,7 @@ const els = {
     videoBitrateMbps: $('videoBitrateMbps'),
     sampleCount: $('sampleCount'),
     allowLowConfidence: $('allowLowConfidence'),
+    autoPresetSummary: $('autoPresetSummary'),
     processBtn: $('processBtn'),
     detectBtn: $('detectBtn'),
     downloadBtn: $('downloadBtn'),
@@ -82,6 +95,14 @@ function formatBitrate(value) {
     return `${(value / 1000 / 1000).toFixed(2)} Mbps`;
 }
 
+function formatPlaybackTime(value) {
+    if (!Number.isFinite(value) || value < 0) return '0:00';
+    const totalSeconds = Math.floor(value);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function updateButtons() {
     const hasFile = Boolean(state.file);
     els.detectBtn.disabled = !hasFile || state.running;
@@ -90,6 +111,117 @@ function updateButtons() {
     els.downloadBtn.setAttribute('aria-disabled', canDownload ? 'false' : 'true');
     els.downloadBtn.tabIndex = canDownload ? 0 : -1;
     els.resetBtn.disabled = state.running;
+    updatePlaybackControls();
+}
+
+function hasPlayableOriginal() {
+    return Boolean(state.originalUrl) && Number.isFinite(els.originalVideo.duration);
+}
+
+function hasPlayableProcessed() {
+    return Boolean(state.processedUrl);
+}
+
+function updatePlaybackControls() {
+    const canPlay = Boolean(state.originalUrl);
+    els.playPauseBtn.disabled = !canPlay;
+    els.scrubber.disabled = !canPlay;
+    els.playPauseBtn.dataset.playing = els.originalVideo.paused ? 'false' : 'true';
+    els.playPauseBtn.setAttribute('aria-label', els.originalVideo.paused ? '播放' : '暂停');
+
+    const duration = Number.isFinite(els.originalVideo.duration) ? els.originalVideo.duration : 0;
+    const currentTime = Number.isFinite(els.originalVideo.currentTime) ? els.originalVideo.currentTime : 0;
+    if (duration > 0 && !els.scrubber.matches(':active')) {
+        els.scrubber.value = String(Math.round((currentTime / duration) * 1000));
+    }
+    els.timeLabel.textContent = duration > 0
+        ? `${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)}`
+        : formatPlaybackTime(currentTime);
+}
+
+function updateCompareMode() {
+    const hasAfter = hasPlayableProcessed();
+    els.afterBadge.hidden = !hasAfter;
+    els.processedEmpty.hidden = hasAfter;
+}
+
+function syncProcessedToOriginal({ force = false } = {}) {
+    if (!hasPlayableProcessed() || state.syncingPlayback) return;
+    const targetTime = Number(els.originalVideo.currentTime) || 0;
+    if (!force && Math.abs((Number(els.processedVideo.currentTime) || 0) - targetTime) < 0.08) return;
+
+    state.syncingPlayback = true;
+    try {
+        els.processedVideo.currentTime = targetTime;
+    } catch (error) {
+        console.warn('sync processed video failed:', error);
+    } finally {
+        state.syncingPlayback = false;
+    }
+}
+
+async function playComparison() {
+    if (!state.originalUrl) return;
+    syncProcessedToOriginal({ force: true });
+    try {
+        await els.originalVideo.play();
+        if (hasPlayableProcessed()) {
+            await els.processedVideo.play().catch((error) => {
+                console.warn('processed video play failed:', error);
+            });
+        }
+    } catch (error) {
+        console.warn('original video play failed:', error);
+        setStatus('浏览器阻止了播放，请再点一次播放按钮。', 'warn');
+    } finally {
+        updatePlaybackControls();
+    }
+}
+
+function pauseComparison() {
+    els.originalVideo.pause();
+    els.processedVideo.pause();
+    updatePlaybackControls();
+}
+
+function togglePlayback() {
+    if (els.originalVideo.paused) {
+        playComparison();
+    } else {
+        pauseComparison();
+    }
+}
+
+function seekComparison(value) {
+    const duration = Number(els.originalVideo.duration);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const currentTime = (Number(value) / 1000) * duration;
+    els.originalVideo.currentTime = currentTime;
+    syncProcessedToOriginal({ force: true });
+    updatePlaybackControls();
+}
+
+function renderAutoPresetSummary(preset = null) {
+    if (!els.autoPresetSummary) return;
+    if (!preset) {
+        els.autoPresetSummary.innerHTML = `
+            <strong>自动参数</strong>
+            <span>选择视频后自动检测并套用合适参数。</span>
+        `;
+        return;
+    }
+
+    const bitrate = Number(preset.videoBitrateMbps) > 0
+        ? `${preset.videoBitrateMbps}Mbps`
+        : '自动码率';
+    const denoise = preset.denoiseBackend && preset.denoiseBackend !== VIDEO_DENOISE_BACKENDS.NONE
+        ? preset.denoiseBackend
+        : '关闭后端去噪';
+    els.autoPresetSummary.innerHTML = `
+        <strong>${preset.label}</strong>
+        <span>${preset.description}</span>
+        <span class="muted">码率 ${bitrate}，${denoise}</span>
+    `;
 }
 
 function renderMetadata(metadata) {
@@ -136,8 +268,13 @@ function cleanupUrls() {
 }
 
 async function setFile(file) {
-    if (!file || !file.type.startsWith('video/')) {
-        setStatus('请选择 MP4 视频文件。', 'warn');
+    const fileKind = getDebugFileKind(file);
+    if (fileKind === 'image') {
+        await routeImageFile(file);
+        return;
+    }
+    if (fileKind !== 'video') {
+        setStatus('请选择图片或视频文件。视频会在本页处理，图片会回到单图对比页。', 'warn');
         return;
     }
 
@@ -150,11 +287,13 @@ async function setFile(file) {
 
     state.originalUrl = URL.createObjectURL(file);
     els.originalVideo.src = state.originalUrl;
+    els.originalVideo.currentTime = 0;
     els.processedVideo.removeAttribute('src');
+    els.processedVideo.load();
     els.downloadBtn.removeAttribute('href');
     els.downloadBtn.removeAttribute('download');
     els.originalEmpty.hidden = true;
-    els.processedEmpty.hidden = false;
+    updateCompareMode();
     renderMetadata(null);
     renderDetection(null);
     setProgress(0, '准备就绪');
@@ -165,12 +304,24 @@ async function setFile(file) {
         const metadata = await inspectGeminiVideoFile(file);
         state.metadata = metadata;
         renderMetadata(metadata);
-        setStatus('视频已载入，可先检测，也可直接导出。');
+        applyAutomaticPreset(null, metadata, { silent: true });
+        setStatus('视频已载入，导出时会自动检测并选择参数。');
     } catch (error) {
         console.error(error);
         setStatus(error.message || '读取视频失败', 'error');
     } finally {
         updateButtons();
+    }
+}
+
+async function routeImageFile(file) {
+    try {
+        setStatus('正在进入图片调试流程...');
+        await saveDebugFileHandoff(file, 'image');
+        window.location.assign('./dev-preview.html?fileHandoff=1');
+    } catch (error) {
+        console.error(error);
+        setStatus(error.message || '无法进入图片调试流程，请打开单图页后重新选择文件。', 'warn');
     }
 }
 
@@ -192,9 +343,11 @@ async function runDetection() {
         renderMetadata(result.metadata);
         renderDetection(result.detection);
         setProgress(1, result.detection.isConfident ? '检测完成' : '低置信');
-        const presetApplied = maybeApplyRelocatedReviewPreset(result.detection, { metadata: result.metadata });
-        if (!presetApplied) {
-            setStatus(result.detection.isConfident ? '检测完成，可以导出。' : '检测置信度偏低，建议检查候选结果。', result.detection.isConfident ? 'success' : 'warn');
+        const preset = applyAutomaticPreset(result.detection, result.metadata, { silent: true });
+        if (preset.id === 'relocated-review') {
+            setStatus('检测到迁移锚点水印，已自动选择复核预设。', 'warn');
+        } else {
+            setStatus(result.detection.isConfident ? '检测完成，已自动选择参数。' : '检测置信度偏低，已保留保守参数。', result.detection.isConfident ? 'success' : 'warn');
         }
     } catch (error) {
         console.error(error);
@@ -227,10 +380,10 @@ async function runExport() {
             state.detection = detected.detection;
             renderMetadata(detected.metadata);
             renderDetection(detected.detection);
-            maybeApplyRelocatedReviewPreset(detected.detection, { metadata: detected.metadata });
             detectionPayload = { metadata: detected.metadata, detection: detected.detection };
+            applyAutomaticPreset(detected.detection, detected.metadata, { silent: true });
         } else {
-            maybeApplyRelocatedReviewPreset(detectionPayload.detection, { metadata: detectionPayload.metadata, silent: true });
+            applyAutomaticPreset(detectionPayload.detection, detectionPayload.metadata, { silent: true });
         }
 
         const result = await removeGeminiVideoWatermark(state.file, {
@@ -264,7 +417,7 @@ async function runExport() {
             sampleCount: Number(els.sampleCount.value) || DEFAULT_SAMPLE_COUNT,
             detection: detectionPayload,
             allowLowConfidence: els.allowLowConfidence.checked,
-            onProgress: ({ phase, progress, processedFrames, frameEstimate, metadata, detection }) => {
+            onProgress: ({ phase, progress, processedFrames, metadata, detection }) => {
                 if (jobId !== state.jobId) return;
                 if (metadata) {
                     state.metadata = metadata;
@@ -278,8 +431,9 @@ async function runExport() {
                     setProgress(progress * 0.12, progress >= 1 ? '检测完成' : '检测中');
                 } else if (phase === 'export') {
                     const exportProgress = 0.12 + progress * 0.88;
-                    const frames = frameEstimate ? `${processedFrames}/${frameEstimate}` : `${processedFrames}`;
+                    const frames = Number.isFinite(processedFrames) ? `${processedFrames} 帧` : '处理中';
                     setProgress(exportProgress, `导出中 ${frames}`);
+                    setStatus(`正在导出视频，已处理 ${frames}。`);
                 }
             }
         });
@@ -288,7 +442,10 @@ async function runExport() {
         if (state.processedUrl) URL.revokeObjectURL(state.processedUrl);
         state.processedUrl = URL.createObjectURL(result.blob);
         els.processedVideo.src = state.processedUrl;
+        els.processedVideo.load();
         els.processedEmpty.hidden = true;
+        updateCompareMode();
+        syncProcessedToOriginal({ force: true });
         els.downloadBtn.href = state.processedUrl;
         els.downloadBtn.download = `${state.file.name.replace(/\.[^.]+$/, '')}_gwr_video_mvp.mp4`;
         setProgress(1, '完成');
@@ -314,13 +471,16 @@ function reset() {
     state.running = false;
     els.fileInput.value = '';
     els.originalVideo.removeAttribute('src');
+    els.originalVideo.load();
     els.processedVideo.removeAttribute('src');
+    els.processedVideo.load();
     els.downloadBtn.removeAttribute('href');
     els.downloadBtn.removeAttribute('download');
     els.originalEmpty.hidden = false;
-    els.processedEmpty.hidden = false;
+    updateCompareMode();
     renderMetadata(null);
     renderDetection(null);
+    renderAutoPresetSummary(null);
     setProgress(0, '等待视频');
     setStatus('');
     updateButtons();
@@ -331,30 +491,38 @@ function setNumberControl(input, value) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function applyRelocatedReviewPreset() {
-    const preset = getRelocatedReviewPresetConfig();
-    els.denoiseBackend.value = preset.denoiseBackend;
+function applyPresetToControls(preset) {
+    if (!preset) return;
+    setNumberControl(els.alphaGain, preset.alphaGain ?? DEFAULT_ALPHA_GAIN);
+    els.adaptiveAlpha.checked = preset.adaptiveAlpha ?? DEFAULT_ADAPTIVE_ALPHA;
+    els.highQualityCleanup.checked = preset.highQualityCleanup ?? DEFAULT_HIGH_QUALITY_CLEANUP;
+    els.denoiseBackend.value = Object.values(VIDEO_DENOISE_BACKENDS).includes(preset.denoiseBackend)
+        ? preset.denoiseBackend
+        : DEFAULT_DENOISE_BACKEND;
     els.denoiseBackend.dispatchEvent(new Event('change', { bubbles: true }));
-    setNumberControl(els.edgeDenoiseStrength, preset.edgeDenoiseStrength);
-    els.videoBitrateMbps.value = String(preset.videoBitrateMbps);
-    els.allowLowConfidence.checked = preset.allowLowConfidence;
-    setStatus('已应用迁移锚点复核预设：匹配 Delta 0.25、12Mbps、允许低置信。此预设用于人工复核，不是默认策略。', 'warn');
+    setNumberControl(els.edgeDenoiseStrength, preset.edgeDenoiseStrength ?? DEFAULT_EDGE_DENOISE_STRENGTH);
+    setNumberControl(els.residualCleanup, preset.residualCleanupStrength ?? DEFAULT_RESIDUAL_CLEANUP_STRENGTH);
+    els.sampleCount.value = String(preset.sampleCount ?? DEFAULT_SAMPLE_COUNT);
+    els.videoBitrateMbps.value = Number(preset.videoBitrateMbps) > 0
+        ? String(preset.videoBitrateMbps)
+        : '';
+    els.allowLowConfidence.checked = preset.allowLowConfidence === true;
+    renderAutoPresetSummary(preset);
 }
 
-function maybeApplyRelocatedReviewPreset(detection, { metadata = state.metadata, silent = false } = {}) {
-    if (!shouldUseRelocatedReviewPreset(detection, metadata)) return false;
-    if (els.denoiseBackend.value && els.denoiseBackend.value !== DEFAULT_DENOISE_BACKEND) return false;
-
-    const preset = getRelocatedReviewPresetConfig();
-    els.denoiseBackend.value = preset.denoiseBackend;
-    els.denoiseBackend.dispatchEvent(new Event('change', { bubbles: true }));
-    setNumberControl(els.edgeDenoiseStrength, preset.edgeDenoiseStrength);
-    els.videoBitrateMbps.value = String(preset.videoBitrateMbps);
-    els.allowLowConfidence.checked = preset.allowLowConfidence;
+function applyAutomaticPreset(detection = state.detection, metadata = state.metadata, { silent = false } = {}) {
+    const preset = getAutomaticVideoPresetConfig(detection, metadata);
+    applyPresetToControls(preset);
     if (!silent) {
-        setStatus('检测到迁移锚点水印，已自动应用复核预设：匹配 Delta 0.25、12Mbps、保留音频。', 'warn');
+        setStatus(`已自动选择：${preset.label}。`, preset.allowLowConfidence ? 'warn' : 'success');
     }
-    return true;
+    return preset;
+}
+
+function applyRelocatedReviewPreset() {
+    const preset = getRelocatedReviewPresetConfig();
+    applyPresetToControls(preset);
+    setStatus('已应用迁移锚点复核预设：匹配 Delta 0.25、12Mbps、允许低置信。此预设用于人工复核，不是默认策略。', 'warn');
 }
 
 function setupEvents() {
@@ -366,7 +534,7 @@ function setupEvents() {
         }
     });
     els.fileInput.addEventListener('change', (event) => {
-        const file = event.target.files?.[0];
+        const file = pickDebugUploadFile(event.target.files);
         if (file) setFile(file);
     });
 
@@ -383,7 +551,7 @@ function setupEvents() {
         });
     }
     els.dropzone.addEventListener('drop', (event) => {
-        const file = event.dataTransfer?.files?.[0];
+        const file = pickDebugUploadFile(event.dataTransfer?.files);
         if (file) setFile(file);
     });
 
@@ -403,10 +571,47 @@ function setupEvents() {
     els.downloadBtn.addEventListener('click', (event) => {
         if (!state.processedUrl || state.running) event.preventDefault();
     });
+    els.playPauseBtn.addEventListener('click', togglePlayback);
+    els.scrubber.addEventListener('input', (event) => {
+        seekComparison(event.target.value);
+    });
+    els.originalVideo.addEventListener('loadedmetadata', () => {
+        updatePlaybackControls();
+    });
+    els.originalVideo.addEventListener('timeupdate', () => {
+        if (!els.originalVideo.paused) syncProcessedToOriginal();
+        updatePlaybackControls();
+    });
+    els.originalVideo.addEventListener('pause', () => {
+        if (!els.processedVideo.paused) els.processedVideo.pause();
+        updatePlaybackControls();
+    });
+    els.originalVideo.addEventListener('ended', () => {
+        pauseComparison();
+    });
+    els.processedVideo.addEventListener('loadedmetadata', () => {
+        syncProcessedToOriginal({ force: true });
+        updateCompareMode();
+    });
     window.addEventListener('beforeunload', cleanupUrls);
 }
 
-function init() {
+async function consumePendingVideoHandoff() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('fileHandoff') !== '1') return;
+
+    try {
+        const record = await consumeDebugFileHandoff('video');
+        if (!record?.file) return;
+        await setFile(record.file);
+        window.history.replaceState(null, '', window.location.pathname);
+    } catch (error) {
+        console.warn('video handoff unavailable:', error);
+        setStatus(error.message || '读取视频暂存失败，请重新选择文件。', 'warn');
+    }
+}
+
+async function init() {
     els.alphaGain.value = String(DEFAULT_ALPHA_GAIN);
     els.alphaGainValue.textContent = DEFAULT_ALPHA_GAIN.toFixed(2);
     els.adaptiveAlpha.checked = DEFAULT_ADAPTIVE_ALPHA;
@@ -420,6 +625,7 @@ function init() {
     els.residualCleanupValue.textContent = DEFAULT_RESIDUAL_CLEANUP_STRENGTH.toFixed(2);
     els.videoBitrateMbps.value = '';
     els.sampleCount.value = String(DEFAULT_SAMPLE_COUNT);
+    renderAutoPresetSummary(getAutomaticVideoPresetConfig());
 
     if (!('VideoDecoder' in window) || !('VideoEncoder' in window)) {
         setStatus('当前浏览器缺少 WebCodecs，请使用新版 Chrome 或 Edge。', 'error');
@@ -427,9 +633,11 @@ function init() {
 
     renderMetadata(null);
     renderDetection(null);
+    updateCompareMode();
     setProgress(0, '等待视频');
     setupEvents();
     updateButtons();
+    await consumePendingVideoHandoff();
 }
 
 init();

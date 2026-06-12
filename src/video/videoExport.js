@@ -883,11 +883,16 @@ export async function removeGeminiVideoWatermark(file, options = {}) {
             processedFrames++;
 
             const frameEstimate = metadata.frameCountEstimate || Math.max(1, Math.round((metadata.duration || 0) * metadata.frameRate));
+            const elapsedSeconds = timestamp + duration;
+            const timeProgress = Number.isFinite(metadata.duration) && metadata.duration > 0
+                ? Math.max(0, Math.min(1, elapsedSeconds / metadata.duration))
+                : null;
             onProgress({
                 phase: 'export',
-                progress: frameEstimate ? Math.min(1, processedFrames / frameEstimate) : 0,
+                progress: timeProgress ?? (frameEstimate ? Math.min(1, processedFrames / frameEstimate) : 0),
                 processedFrames,
                 frameEstimate,
+                elapsedSeconds,
                 metadata,
                 detection,
                 skippedFrames,

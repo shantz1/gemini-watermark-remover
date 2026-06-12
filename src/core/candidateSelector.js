@@ -272,7 +272,7 @@ function buildStandardCandidateSeeds({
             config
         );
 
-        seeds.push({
+        const baseSeed = {
             config: candidateConfig,
             position: candidatePosition,
             alphaMap,
@@ -290,10 +290,42 @@ function buildStandardCandidateSeeds({
                     catalogEvidenceGate: catalogEntry.metadata.evidenceGate
                 } : null
             )
-        });
+        };
+        seeds.push(baseSeed);
+
+        if (shouldAddDarkPolaritySeed(candidateConfig)) {
+            seeds.push({
+                ...baseSeed,
+                alphaMap: createNegativeAlphaMap(alphaMap),
+                source: `${baseSeed.source}+dark-polarity`,
+                provenance: mergeCandidateProvenance(
+                    baseSeed.provenance,
+                    { darkPolarity: true }
+                )
+            });
+        }
     }
 
     return seeds;
+}
+
+function shouldAddDarkPolaritySeed(config) {
+    return config?.logoSize === 96 &&
+        config.marginRight === 192 &&
+        config.marginBottom === 192;
+}
+
+const negativeAlphaMapCache = new WeakMap();
+
+function createNegativeAlphaMap(alphaMap) {
+    const cached = negativeAlphaMapCache.get(alphaMap);
+    if (cached) return cached;
+    const negative = new Float32Array(alphaMap.length);
+    for (let index = 0; index < alphaMap.length; index++) {
+        negative[index] = -alphaMap[index];
+    }
+    negativeAlphaMapCache.set(alphaMap, negative);
+    return negative;
 }
 
 function inferDecisionTier(candidate, { directMatch = false } = {}) {
@@ -886,6 +918,38 @@ function pickBestValidatedCandidate(candidates) {
         shouldPreserveStrongCanonical96AgainstWeakCurrentLargeMargin(candidate, validationBest)
     ));
     return preservedStrongCanonical96 ?? validationBest;
+}
+
+function pickAggressiveStrongLocatedCandidate(candidates) {
+    const located = candidates
+        .filter((candidate) => (
+            candidate &&
+            isAggressiveLocatedCandidate(candidate)
+        ))
+        .sort((left, right) => {
+            const rightSignal =
+                Number(right.originalSpatialScore) +
+                Math.max(0, Number(right.originalGradientScore)) * 0.75;
+            const leftSignal =
+                Number(left.originalSpatialScore) +
+                Math.max(0, Number(left.originalGradientScore)) * 0.75;
+            if (rightSignal !== leftSignal) return rightSignal - leftSignal;
+            return Number(left.validationCost ?? Infinity) - Number(right.validationCost ?? Infinity);
+        });
+    return located[0] ?? null;
+}
+
+function isAggressiveLocatedCandidate(candidate) {
+    const spatialScore = Number(candidate.originalSpatialScore);
+    const gradientScore = Number(candidate.originalGradientScore);
+    if (!Number.isFinite(spatialScore) || !Number.isFinite(gradientScore)) return false;
+
+    const highConfidence = spatialScore >= 0.75 && gradientScore >= 0.5;
+    const clearShape = spatialScore >= 0.38 && gradientScore >= -0.06;
+    const lowContrastShape = spatialScore >= 0.24 && gradientScore >= 0.02;
+    const visibleGradient = spatialScore >= 0.12 && gradientScore >= 0.28;
+
+    return highConfidence || clearShape || lowContrastShape || visibleGradient;
 }
 
 function createCandidateRegionImageData({
@@ -2358,6 +2422,7 @@ export function selectInitialCandidate({
     getAlphaMap,
     allowAdaptiveSearch,
     allowAutomaticSearch = true,
+    allowAggressiveStrongLocated = false,
     alphaGainCandidates,
     alphaPriorityGains = [1],
     alpha96Variants = null
@@ -2607,6 +2672,19 @@ export function selectInitialCandidate({
             adaptiveTrial
         ]);
         if (!validatedCandidate) {
+            const aggressiveLocatedCandidate = allowAggressiveStrongLocated
+                ? pickAggressiveStrongLocatedCandidate([
+                    ...standardTrials,
+                    adaptiveTrial
+                ])
+                : null;
+            if (aggressiveLocatedCandidate) {
+                baseCandidate = {
+                    ...aggressiveLocatedCandidate,
+                    source: `${aggressiveLocatedCandidate.source}+aggressive-located`
+                };
+                baseDecisionTier = 'direct-match';
+            } else {
             const fixedCoreLocalGeometryCandidate = !allowAutomaticSearch
                 ? searchFixedCoreLocalGeometryCandidate({
                     originalImageData,
@@ -2632,6 +2710,7 @@ export function selectInitialCandidate({
                     alphaGain: 1,
                     decisionTier: 'insufficient'
                 };
+            }
             }
         } else {
             baseCandidate = {
@@ -2716,6 +2795,19 @@ export function selectInitialCandidate({
             ])
             : null;
         if (!validatedCandidate) {
+            const aggressiveLocatedCandidate = allowAggressiveStrongLocated
+                ? pickAggressiveStrongLocatedCandidate([
+                    ...standardTrials,
+                    adaptiveTrial
+                ])
+                : null;
+            if (aggressiveLocatedCandidate) {
+                baseCandidate = {
+                    ...aggressiveLocatedCandidate,
+                    source: `${aggressiveLocatedCandidate.source}+aggressive-located`
+                };
+                baseDecisionTier = 'direct-match';
+            } else {
             const fixedCoreLocalGeometryCandidate = !allowAutomaticSearch
                 ? searchFixedCoreLocalGeometryCandidate({
                     originalImageData,
@@ -2741,6 +2833,7 @@ export function selectInitialCandidate({
                     alphaGain: 1,
                     decisionTier: 'insufficient'
                 };
+            }
             }
         } else {
             baseCandidate = {

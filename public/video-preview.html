@@ -98,12 +98,7 @@
       gap: 18px;
       padding-top: 18px;
     }
-    .workspace {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      min-width: 0;
-    }
+    .workspace { min-width: 0; }
     .panel {
       border: 1px solid var(--line);
       background: var(--panel);
@@ -120,19 +115,49 @@
       font-size: 0.9rem;
       font-weight: 650;
     }
-    .video-box {
+    .compare-player {
       position: relative;
       aspect-ratio: 16 / 9;
       background: oklch(18% 0.01 170);
       overflow: hidden;
-      border-radius: 0 0 8px 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
     }
-    video {
-      width: 100%;
+    .compare-pane {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      background: oklch(18% 0.01 170);
+    }
+    .compare-pane video {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 200%;
+      max-width: none;
       height: 100%;
       display: block;
-      object-fit: contain;
+      object-fit: cover;
       background: oklch(18% 0.01 170);
+    }
+    .compare-pane[hidden],
+    .badge[hidden],
+    .empty[hidden] {
+      display: none;
+    }
+    .badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 6;
+      border-radius: 999px;
+      padding: 6px 12px;
+      background: oklch(18% 0.1 260);
+      color: oklch(98% 0.004 170);
+      font-size: 0.86rem;
+      font-weight: 650;
+      pointer-events: none;
     }
     .empty {
       position: absolute;
@@ -143,6 +168,59 @@
       font-size: 0.92rem;
       text-align: center;
       padding: 20px;
+      z-index: 4;
+      pointer-events: none;
+    }
+    .compare-controls {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 72px;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--line);
+      border-radius: 0 0 8px 8px;
+      background: var(--panel);
+      color: var(--text);
+    }
+    .compare-controls .play-toggle {
+      position: relative;
+      min-height: 34px;
+      width: 34px;
+      padding: 0;
+      border-color: oklch(82% 0.026 168);
+      background: oklch(97% 0.012 168);
+      color: var(--accent-strong);
+    }
+    .compare-controls .play-toggle:hover:not(:disabled) {
+      background: oklch(94% 0.022 168);
+      border-color: oklch(72% 0.055 168);
+    }
+    .play-toggle::before {
+      content: "";
+      width: 0;
+      height: 0;
+      margin-left: 2px;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 11px solid currentColor;
+    }
+    .play-toggle[data-playing="true"]::before,
+    .play-toggle[data-playing="true"]::after {
+      content: "";
+      width: 4px;
+      height: 15px;
+      margin: 0 2px;
+      border: 0;
+      background: currentColor;
+    }
+    .compare-controls input[type="range"] {
+      accent-color: var(--accent);
+    }
+    .time-label {
+      font-size: 0.82rem;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
     }
     .side {
       display: flex;
@@ -174,6 +252,48 @@
     .field {
       display: grid;
       gap: 7px;
+    }
+    .auto-summary {
+      border: 1px solid oklch(84% 0.025 168);
+      background: oklch(97% 0.012 168);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+    .auto-summary strong {
+      display: block;
+      color: var(--text);
+      font-size: 0.95rem;
+      margin-bottom: 4px;
+    }
+    .auto-summary span {
+      display: block;
+    }
+    .advanced-settings {
+      border-top: 1px solid var(--line);
+      padding-top: 2px;
+    }
+    .advanced-settings summary {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      color: var(--accent-strong);
+      font-size: 0.9rem;
+      font-weight: 650;
+      user-select: none;
+    }
+    .advanced-settings summary:focus-visible {
+      outline: 2px solid oklch(70% 0.12 168);
+      outline-offset: 2px;
+      border-radius: 7px;
+    }
+    .advanced-controls {
+      display: grid;
+      gap: 14px;
+      padding-top: 8px;
     }
     label {
       color: var(--muted);
@@ -277,7 +397,6 @@
 
     @media (max-width: 980px) {
       .layout { grid-template-columns: 1fr; }
-      .workspace { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
       .shell { width: min(100% - 20px, 1280px); padding-top: 12px; }
@@ -299,92 +418,107 @@
     </header>
 
     <main class="layout">
-      <section class="workspace" aria-label="视频预览">
+      <section class="workspace" aria-label="视频对比">
         <div class="panel">
-          <div class="panel-head"><span>原视频</span><span id="progressText">等待视频</span></div>
-          <div class="video-box">
-            <video id="originalVideo" controls playsinline></video>
-            <div id="originalEmpty" class="empty">选择或拖入 MP4</div>
+          <div class="panel-head"><span>Before / After 对比</span><span id="progressText">等待视频</span></div>
+          <div id="comparePlayer" class="compare-player">
+            <div class="compare-pane">
+              <video id="originalVideo" playsinline preload="metadata"></video>
+              <span class="badge">Before</span>
+              <div id="originalEmpty" class="empty">选择或拖入图片 / 视频</div>
+            </div>
+            <div class="compare-pane">
+              <video id="processedVideo" playsinline preload="metadata" muted></video>
+              <span id="afterBadge" class="badge" hidden>After</span>
+              <div id="processedEmpty" class="empty">导出完成后显示右侧对比</div>
+            </div>
           </div>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><span>处理后</span><span>MP4</span></div>
-          <div class="video-box">
-            <video id="processedVideo" controls playsinline></video>
-            <div id="processedEmpty" class="empty">导出完成后显示</div>
+          <div class="compare-controls">
+            <button id="playPauseBtn" class="play-toggle" type="button" data-playing="false" aria-label="播放" disabled></button>
+            <input id="scrubber" type="range" min="0" max="1000" value="0" aria-label="播放进度" disabled>
+            <span id="timeLabel" class="time-label">0:00</span>
           </div>
         </div>
       </section>
 
       <aside class="side" aria-label="处理设置">
         <div id="dropzone" class="dropzone" data-dragging="false" role="button" tabindex="0">
-          <strong>选择视频</strong>
-          <span class="muted">支持本地 MP4。10 秒 1080p 样例最适合当前 MVP。</span>
-          <input id="fileInput" type="file" accept="video/mp4,video/*" hidden>
+          <strong>选择文件</strong>
+          <span class="muted">视频会在本页处理，图片会回到单图对比页。10 秒 1080p MP4 样例最适合当前 MVP。</span>
+          <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,video/*" hidden>
         </div>
 
         <div class="panel">
-          <div class="panel-head">参数</div>
+          <div class="panel-head">自动处理</div>
           <div class="controls">
-            <div class="field">
-              <label for="alphaGain">Alpha 种子 <span id="alphaGainValue">1.00</span></label>
-              <input id="alphaGain" type="range" min="0.25" max="1.35" step="0.05">
+            <div id="autoPresetSummary" class="auto-summary">
+              <strong>自动参数</strong>
+              <span>选择视频后自动检测并套用合适参数。</span>
             </div>
-            <label class="check">
-              <input id="adaptiveAlpha" type="checkbox">
-              自适应每帧 Alpha
-            </label>
-            <label class="check">
-              <input id="highQualityCleanup" type="checkbox">
-              实验性边缘去噪
-            </label>
-            <div class="field">
-              <label for="denoiseBackend">后端去噪</label>
-              <select id="denoiseBackend">
-                <option value="none">关闭</option>
-                <option value="canvas-edge-denoise">Canvas 边缘去噪</option>
-                <option value="canvas-edge-band-denoise">Canvas 边缘带去噪</option>
-                <option value="canvas-edge-core-denoise">Canvas 边缘核心去噪</option>
-                <option value="canvas-footprint-polish">Canvas 足迹抛光</option>
-                <option value="canvas-temporal-delta-stabilize">Canvas 时序 Delta 稳定</option>
-                <option value="canvas-temporal-match-delta-stabilize">Canvas 匹配 Delta 稳定（迁移锚点复核）</option>
-                <option value="canvas-temporal-stabilize">Canvas 时序稳定</option>
-                <option value="canvas-texture-repair">Canvas 纹理回填</option>
-              </select>
-            </div>
-            <div class="preset-row">
-              <button id="relocatedReviewPresetBtn" type="button">迁移锚点复核预设</button>
-            </div>
-            <div class="field">
-              <label for="edgeDenoiseStrength">边缘去噪强度 <span id="edgeDenoiseStrengthValue">0.65</span></label>
-              <input id="edgeDenoiseStrength" type="range" min="0" max="1" step="0.05">
-            </div>
-            <div class="field">
-              <label for="residualCleanup">边缘软清理 <span id="residualCleanupValue">1.20</span></label>
-              <input id="residualCleanup" type="range" min="0" max="1.80" step="0.05">
-            </div>
-            <div class="field">
-              <label for="sampleCount">检测抽帧数</label>
-              <input id="sampleCount" type="number" min="4" max="24" step="1">
-            </div>
-            <div class="field">
-              <label for="videoBitrateMbps">导出码率 Mbps</label>
-              <input id="videoBitrateMbps" type="number" min="1" max="80" step="0.5" placeholder="自动">
-            </div>
-            <label class="check">
-              <input id="allowLowConfidence" type="checkbox">
-              允许低置信导出
-            </label>
             <div class="progress" aria-label="处理进度"><span id="progressBar"></span></div>
             <div id="status" class="status" data-tone="info"></div>
             <div class="actions">
-              <button id="detectBtn" type="button">检测</button>
+              <button id="detectBtn" type="button">检测水印</button>
               <button id="resetBtn" type="button">重置</button>
-              <button id="processBtn" class="primary" type="button">导出无水印视频</button>
+              <button id="processBtn" class="primary" type="button">自动导出无水印视频</button>
               <a id="downloadBtn" class="download-link" aria-disabled="true">下载结果</a>
             </div>
+            <details class="advanced-settings">
+              <summary>高级参数</summary>
+              <div class="advanced-controls">
+                <div class="field">
+                  <label for="alphaGain">Alpha 种子 <span id="alphaGainValue">1.00</span></label>
+                  <input id="alphaGain" type="range" min="0.25" max="1.35" step="0.05">
+                </div>
+                <label class="check">
+                  <input id="adaptiveAlpha" type="checkbox">
+                  自适应每帧 Alpha
+                </label>
+                <label class="check">
+                  <input id="highQualityCleanup" type="checkbox">
+                  实验性边缘去噪
+                </label>
+                <div class="field">
+                  <label for="denoiseBackend">后端去噪</label>
+                  <select id="denoiseBackend">
+                    <option value="none">关闭</option>
+                    <option value="canvas-edge-denoise">Canvas 边缘去噪</option>
+                    <option value="canvas-edge-band-denoise">Canvas 边缘带去噪</option>
+                    <option value="canvas-edge-core-denoise">Canvas 边缘核心去噪</option>
+                    <option value="canvas-footprint-polish">Canvas 足迹抛光</option>
+                    <option value="canvas-temporal-delta-stabilize">Canvas 时序 Delta 稳定</option>
+                    <option value="canvas-temporal-match-delta-stabilize">Canvas 匹配 Delta 稳定（迁移锚点复核）</option>
+                    <option value="canvas-temporal-stabilize">Canvas 时序稳定</option>
+                    <option value="canvas-texture-repair">Canvas 纹理回填</option>
+                  </select>
+                </div>
+                <div class="preset-row">
+                  <button id="relocatedReviewPresetBtn" type="button">迁移锚点复核预设</button>
+                </div>
+                <div class="field">
+                  <label for="edgeDenoiseStrength">边缘去噪强度 <span id="edgeDenoiseStrengthValue">0.65</span></label>
+                  <input id="edgeDenoiseStrength" type="range" min="0" max="1" step="0.05">
+                </div>
+                <div class="field">
+                  <label for="residualCleanup">边缘软清理 <span id="residualCleanupValue">1.20</span></label>
+                  <input id="residualCleanup" type="range" min="0" max="1.80" step="0.05">
+                </div>
+                <div class="field">
+                  <label for="sampleCount">检测抽帧数</label>
+                  <input id="sampleCount" type="number" min="4" max="24" step="1">
+                </div>
+                <div class="field">
+                  <label for="videoBitrateMbps">导出码率 Mbps</label>
+                  <input id="videoBitrateMbps" type="number" min="1" max="80" step="0.5" placeholder="自动">
+                </div>
+                <label class="check">
+                  <input id="allowLowConfidence" type="checkbox">
+                  允许低置信导出
+                </label>
+              </div>
+            </details>
           </div>
-          <div class="note">导出会重新编码视频轨，并在 MP4 支持原音频编码时透传音频轨。若检测显示低置信，先看候选位置和样例是否属于 1920x1080 右下角水印。</div>
+          <div class="note">导出会重新编码视频轨，并在 MP4 支持原音频编码时透传音频轨。</div>
         </div>
 
         <div class="panel">

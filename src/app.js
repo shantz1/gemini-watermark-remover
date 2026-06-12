@@ -15,6 +15,12 @@ import {
     showLoading,
     hideLoading
 } from './utils.js';
+import {
+    consumeDebugFileHandoff,
+    getDebugFileKind,
+    pickDebugUploadFile,
+    saveDebugFileHandoff
+} from './shared/debugFileHandoff.js';
 
 const TEXT = {
     loading: '正在加载资源...',
@@ -27,7 +33,10 @@ const TEXT = {
     unsupported: '浏览器不支持复制图片',
     copied: '已复制！',
     copy: '复制结果',
-    copyFailed: '复制失败'
+    copyFailed: '复制失败',
+    unsupportedFile: '请选择 JPG、PNG、WebP 图片，或 MP4/WebM/MOV 视频。',
+    fileTooLarge: '图片调试入口暂不处理超过 20MB 的图片。视频会进入视频调试页。',
+    handoffVideo: '正在进入视频调试流程...'
 };
 
 let enginePromise = null;
@@ -107,6 +116,7 @@ async function init() {
         hideLoading();
         setupEventListeners();
         setupSlider();
+        await consumePendingImageHandoff();
     } catch (error) {
         hideLoading();
         console.error('initialize error:', error);
@@ -140,7 +150,7 @@ function setupEventListeners() {
         const items = e.clipboardData.items;
         const files = [];
         for (let i = 0; i < items.length; i++) {
-            if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+            if (items[i].kind === 'file') {
                 files.push(items[i].getAsFile());
             }
         }
@@ -174,16 +184,26 @@ function handleFileSelect(e) {
     handleFiles(Array.from(e.target.files));
 }
 
-function handleFiles(files) {
+async function handleFiles(files) {
     setStatusMessage('');
 
-    const validFile = files.find((file) => {
-        if (!file || !file.type.match('image/(jpeg|png|webp)')) return false;
-        if (file.size > 20 * 1024 * 1024) return false;
-        return true;
-    });
+    const validFile = pickDebugUploadFile(files);
 
-    if (!validFile) return;
+    if (!validFile) {
+        setStatusMessage(TEXT.unsupportedFile, 'warn');
+        return;
+    }
+
+    const fileKind = getDebugFileKind(validFile);
+    if (fileKind === 'video') {
+        await routeVideoFile(validFile);
+        return;
+    }
+
+    if (validFile.size > 20 * 1024 * 1024) {
+        setStatusMessage(TEXT.fileTooLarge, 'warn');
+        return;
+    }
 
     cleanupCurrentItem();
     currentItem = {
@@ -199,6 +219,33 @@ function handleFiles(files) {
 
     singlePreview.style.display = 'block';
     processSingle(currentItem);
+}
+
+async function routeVideoFile(file) {
+    try {
+        showLoading(TEXT.handoffVideo);
+        await saveDebugFileHandoff(file, 'video');
+        window.location.assign('./video-preview.html?fileHandoff=1');
+    } catch (error) {
+        hideLoading();
+        console.error(error);
+        setStatusMessage(error.message || '无法进入视频调试流程，请打开视频页后重新选择文件。', 'warn');
+    }
+}
+
+async function consumePendingImageHandoff() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('fileHandoff') !== '1') return;
+
+    try {
+        const record = await consumeDebugFileHandoff('image');
+        if (!record?.file) return;
+        await handleFiles([record.file]);
+        window.history.replaceState(null, '', window.location.pathname);
+    } catch (error) {
+        console.warn('image handoff unavailable:', error);
+        setStatusMessage(error.message || '读取图片暂存失败，请重新选择文件。', 'warn');
+    }
 }
 
 function renderSingleImageMeta(item) {

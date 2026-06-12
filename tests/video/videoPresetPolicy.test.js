@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    getAutomaticVideoPresetConfig,
     getRelocatedReviewPresetConfig,
+    getStandardAutoPresetConfig,
     isRelocatedVideoWatermarkPosition,
     shouldUseRelocatedReviewPreset
 } from '../../src/video/videoPresetPolicy.js';
@@ -43,10 +45,35 @@ test('shouldUseRelocatedReviewPreset should require confident relocated detectio
 });
 
 test('getRelocatedReviewPresetConfig should match the reviewed human-review candidate', () => {
-    assert.deepEqual(getRelocatedReviewPresetConfig(), {
+    assert.deepEqual({
+        denoiseBackend: getRelocatedReviewPresetConfig().denoiseBackend,
+        edgeDenoiseStrength: getRelocatedReviewPresetConfig().edgeDenoiseStrength,
+        videoBitrateMbps: getRelocatedReviewPresetConfig().videoBitrateMbps,
+        allowLowConfidence: getRelocatedReviewPresetConfig().allowLowConfidence
+    }, {
         denoiseBackend: VIDEO_DENOISE_BACKENDS.CANVAS_TEMPORAL_MATCH_DELTA_STABILIZE,
         edgeDenoiseStrength: 0.25,
         videoBitrateMbps: 12,
         allowLowConfidence: true
     });
+});
+
+test('getAutomaticVideoPresetConfig should keep normal detections on conservative auto settings', () => {
+    const preset = getAutomaticVideoPresetConfig({
+        isConfident: true,
+        position: { width: 72, marginRight: 72, marginBottom: 72 }
+    }, { width: 1920, height: 1080 });
+
+    assert.equal(preset.id, 'standard-auto');
+    assert.deepEqual(preset, getStandardAutoPresetConfig());
+});
+
+test('getAutomaticVideoPresetConfig should switch relocated detections to review preset', () => {
+    const preset = getAutomaticVideoPresetConfig({
+        isConfident: true,
+        position: { width: 72, marginRight: 144, marginBottom: 144 }
+    }, { width: 1920, height: 1080 });
+
+    assert.equal(preset.id, 'relocated-review');
+    assert.equal(preset.denoiseBackend, VIDEO_DENOISE_BACKENDS.CANVAS_TEMPORAL_MATCH_DELTA_STABILIZE);
 });

@@ -244,10 +244,116 @@ test('processWatermarkImageData should skip off-catalog adaptive-only positions 
     const result = processWatermarkImageData(imageData, {
         alpha48,
         alpha96,
+        aggressiveLocatedFallback: false
     });
 
     assert.equal(result.meta.applied, false);
     assert.equal(result.meta.source, 'skipped');
+});
+
+test('processWatermarkImageData should process strong located off-catalog watermarks by default', () => {
+    const alpha96 = createSyntheticAlphaMap(96);
+    const alpha48 = interpolateAlphaMap(alpha96, 96, 48);
+    const imageData = createPatternImageData(320, 320);
+    const truePosition = { x: 320 - 36 - 48, y: 320 - 20 - 48, width: 48, height: 48 };
+    applySyntheticWatermark(imageData, alpha48, truePosition, 1);
+
+    const result = processWatermarkImageData(imageData, {
+        alpha48,
+        alpha96
+    });
+
+    assert.equal(result.meta.applied, true, `skipReason=${result.meta.skipReason}`);
+    assert.ok(
+        String(result.meta.source).includes('aggressive-located'),
+        `source=${result.meta.source}`
+    );
+    assert.ok(
+        Math.abs(result.meta.position.x - truePosition.x) <= 2,
+        `x=${result.meta.position.x}`
+    );
+    assert.ok(
+        Math.abs(result.meta.position.y - truePosition.y) <= 2,
+        `y=${result.meta.position.y}`
+    );
+    assert.ok(
+        Math.abs(result.meta.detection.processedSpatialScore) < 0.12,
+        `processedSpatial=${result.meta.detection.processedSpatialScore}`
+    );
+});
+
+test('processWatermarkImageData should process dark-polarity 96px 192px-margin watermarks', () => {
+    const alpha48 = getEmbeddedAlphaMap(48);
+    const alpha96 = getEmbeddedAlphaMap(96);
+    const alpha96NewMargin = getEmbeddedAlphaMap('96-20260520');
+    const width = 2778;
+    const height = 1536;
+    const data = new Uint8ClampedArray(width * height * 4);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4;
+            const value = 110 + Math.round(20 * Math.sin(x / 80) + 12 * Math.cos(y / 60));
+            data[idx] = value;
+            data[idx + 1] = value + 4;
+            data[idx + 2] = value + 14;
+            data[idx + 3] = 255;
+        }
+    }
+
+    const imageData = { width, height, data };
+    const position = {
+        x: width - 192 - 96,
+        y: height - 192 - 96,
+        width: 96,
+        height: 96
+    };
+
+    for (let row = 0; row < position.height; row++) {
+        for (let col = 0; col < position.width; col++) {
+            const alpha = alpha96NewMargin[row * position.width + col];
+            if (alpha <= 0.001) continue;
+
+            const idx = ((position.y + row) * imageData.width + position.x + col) * 4;
+            for (let channel = 0; channel < 3; channel++) {
+                imageData.data[idx + channel] = Math.round((1 - alpha) * imageData.data[idx + channel]);
+            }
+        }
+    }
+
+    const result = processWatermarkImageData(imageData, {
+        alpha48,
+        alpha96,
+        alpha96Variants: {
+            '20260520': alpha96NewMargin
+        },
+        getAlphaMap: (size) => {
+            if (size === 48) return alpha48;
+            if (size === 96) return alpha96;
+            if (size === '96-20260520') return alpha96NewMargin;
+            return interpolateAlphaMap(alpha96, 96, size);
+        }
+    });
+
+    assert.equal(result.meta.applied, true, `skipReason=${result.meta.skipReason}`);
+    assert.ok(
+        result.meta.source.includes('dark-polarity'),
+        `source=${result.meta.source}`
+    );
+    assert.deepEqual(result.meta.config, {
+        logoSize: 96,
+        marginRight: 192,
+        marginBottom: 192,
+        alphaVariant: '20260520'
+    });
+    assert.ok(
+        result.meta.detection.processedSpatialScore < 0.08,
+        `processedSpatial=${result.meta.detection.processedSpatialScore}`
+    );
+    assert.ok(
+        result.meta.detection.processedGradientScore < 0.08,
+        `processedGradient=${result.meta.detection.processedGradientScore}`
+    );
 });
 
 test('processWatermarkImageData should recover near-official scaled anchor without adaptive search', () => {
@@ -365,6 +471,7 @@ test('processWatermarkImageData should skip repeated preview watermark layers in
         alpha48,
         alpha96,
         adaptiveMode: 'never',
+        aggressiveLocatedFallback: false,
         getAlphaMap: (size) => interpolateAlphaMap(alpha96, 96, size)
     });
 

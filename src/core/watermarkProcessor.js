@@ -1780,7 +1780,7 @@ export function processWatermarkImageData(imageData, options = {}) {
     };
 
     const initialSelectionStartedAt = nowMs();
-    const initialSelection = selectInitialCandidate({
+    let initialSelection = selectInitialCandidate({
         originalImageData,
         config,
         position,
@@ -1793,6 +1793,34 @@ export function processWatermarkImageData(imageData, options = {}) {
         alphaGainCandidates,
         alphaPriorityGains
     });
+    if (
+        !initialSelection.selectedTrial &&
+        options.aggressiveLocatedFallback !== false
+    ) {
+        const aggressiveSelection = selectInitialCandidate({
+            originalImageData,
+            config,
+            position,
+            alpha48,
+            alpha96,
+            alpha96Variants: options.alpha96Variants ?? null,
+            getAlphaMap: options.getAlphaMap,
+            allowAdaptiveSearch,
+            allowAutomaticSearch: true,
+            allowAggressiveStrongLocated: true,
+            alphaGainCandidates,
+            alphaPriorityGains
+        });
+        if (aggressiveSelection.selectedTrial) {
+            initialSelection = {
+                ...aggressiveSelection,
+                source: aggressiveSelection.source.includes('aggressive-located')
+                    ? aggressiveSelection.source
+                    : `${aggressiveSelection.source}+aggressive-located`,
+                decisionTier: aggressiveSelection.decisionTier || 'direct-match'
+            };
+        }
+    }
     if (debugTimingsEnabled) {
         debugTimings.initialSelectionMs = nowMs() - initialSelectionStartedAt;
     }

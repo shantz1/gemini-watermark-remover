@@ -1,6 +1,14 @@
-import { VIDEO_DENOISE_BACKENDS } from './videoCleanupBackends.js';
+import {
+    DEFAULT_DENOISE_BACKEND,
+    DEFAULT_EDGE_DENOISE_STRENGTH,
+    DEFAULT_HIGH_QUALITY_CLEANUP,
+    DEFAULT_RESIDUAL_CLEANUP_STRENGTH,
+    VIDEO_DENOISE_BACKENDS
+} from './videoCleanupBackends.js';
 
 const RELOCATED_MARGIN_RATIO = 1.8;
+const DEFAULT_AUTO_SAMPLE_COUNT = 12;
+const DEFAULT_AUTO_ALPHA_GAIN = 1;
 
 export function isRelocatedVideoWatermarkPosition(position) {
     if (!position || !Number.isFinite(position.width) || position.width <= 0) {
@@ -43,9 +51,41 @@ export function shouldUseRelocatedReviewPreset(detection, metadata = null) {
 
 export function getRelocatedReviewPresetConfig() {
     return {
+        id: 'relocated-review',
+        label: '迁移锚点自动复核',
+        description: '检测到水印位置偏离常规右下角，自动使用更稳的时序匹配清理。',
+        alphaGain: DEFAULT_AUTO_ALPHA_GAIN,
+        adaptiveAlpha: false,
+        highQualityCleanup: DEFAULT_HIGH_QUALITY_CLEANUP,
         denoiseBackend: VIDEO_DENOISE_BACKENDS.CANVAS_TEMPORAL_MATCH_DELTA_STABILIZE,
         edgeDenoiseStrength: 0.25,
+        residualCleanupStrength: DEFAULT_RESIDUAL_CLEANUP_STRENGTH,
+        sampleCount: DEFAULT_AUTO_SAMPLE_COUNT,
         videoBitrateMbps: 12,
         allowLowConfidence: true
     };
+}
+
+export function getStandardAutoPresetConfig() {
+    return {
+        id: 'standard-auto',
+        label: '自动参数',
+        description: '使用保守默认参数处理常规右下角 Gemini/Veo 水印。',
+        alphaGain: DEFAULT_AUTO_ALPHA_GAIN,
+        adaptiveAlpha: false,
+        highQualityCleanup: DEFAULT_HIGH_QUALITY_CLEANUP,
+        denoiseBackend: DEFAULT_DENOISE_BACKEND,
+        edgeDenoiseStrength: DEFAULT_EDGE_DENOISE_STRENGTH,
+        residualCleanupStrength: DEFAULT_RESIDUAL_CLEANUP_STRENGTH,
+        sampleCount: DEFAULT_AUTO_SAMPLE_COUNT,
+        videoBitrateMbps: '',
+        allowLowConfidence: false
+    };
+}
+
+export function getAutomaticVideoPresetConfig(detection = null, metadata = null) {
+    if (shouldUseRelocatedReviewPreset(detection, metadata)) {
+        return getRelocatedReviewPresetConfig();
+    }
+    return getStandardAutoPresetConfig();
 }
