@@ -88,10 +88,16 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function isWindowsAbsolutePath(filePath) {
+    return /^[A-Za-z]:[\\/]/.test(filePath) || /^\\\\[^\\]/.test(filePath);
+}
+
 function toAssetUrl(filePath, outputPath) {
     if (!filePath) return '';
-    const relativePath = path.relative(path.dirname(path.resolve(outputPath)), path.resolve(filePath));
-    return encodeURI(relativePath.replaceAll(path.sep, '/'));
+    const relativePath = isWindowsAbsolutePath(filePath) && isWindowsAbsolutePath(outputPath)
+        ? path.win32.relative(path.win32.dirname(path.win32.normalize(outputPath)), path.win32.normalize(filePath))
+        : path.relative(path.dirname(path.resolve(outputPath)), path.resolve(filePath));
+    return encodeURI(relativePath.replaceAll('\\', '/'));
 }
 
 function formatNumber(value, digits = 4) {

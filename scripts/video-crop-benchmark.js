@@ -36,9 +36,13 @@ function clonePlainObject(value) {
     return isObject(value) ? JSON.parse(JSON.stringify(value)) : null;
 }
 
+function isWindowsAbsolutePath(filePath) {
+    return /^[A-Za-z]:[\\/]/.test(filePath) || /^\\\\[^\\]/.test(filePath);
+}
+
 function resolveManifestPath(filePath, manifestDir) {
     if (typeof filePath !== 'string' || filePath.length === 0) return null;
-    return path.isAbsolute(filePath)
+    return path.isAbsolute(filePath) || isWindowsAbsolutePath(filePath)
         ? filePath
         : path.resolve(manifestDir, '..', filePath);
 }

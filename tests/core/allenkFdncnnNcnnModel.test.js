@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 
 import {
     NCNN_BINARY_PARAM_MAGIC,
@@ -11,6 +11,23 @@ import {
     summarizeAllenkFdncnnModel
 } from '../../src/core/allenkFdncnnNcnnModel.js';
 
+const EXTRACTED_PARAM_PATH = '.artifacts/allenk-fdncnn/model_core_fp16.param.bin';
+const EXTRACTED_WEIGHT_PATH = '.artifacts/allenk-fdncnn/model_core_fp16.bin';
+
+async function readExtractedAllenkFdncnnFixture(t, { weight = false } = {}) {
+    try {
+        await access(EXTRACTED_PARAM_PATH);
+        if (weight) await access(EXTRACTED_WEIGHT_PATH);
+    } catch {
+        t.skip('extracted allenk FDnCNN NCNN fixture is not present in this checkout');
+        return null;
+    }
+
+    const paramBin = await readFile(EXTRACTED_PARAM_PATH);
+    const weightBin = weight ? await readFile(EXTRACTED_WEIGHT_PATH) : null;
+    return { paramBin, weightBin };
+}
+
 test('halfToFloat should decode common FP16 values', () => {
     assert.equal(halfToFloat(0x0000), 0);
     assert.equal(halfToFloat(0x3c00), 1);
@@ -18,8 +35,11 @@ test('halfToFloat should decode common FP16 values', () => {
     assert.equal(halfToFloat(0x3800), 0.5);
 });
 
-test('parseAllenkFdncnnParam should decode the extracted allenk FDnCNN graph', async () => {
-    const paramBin = await readFile('.artifacts/allenk-fdncnn/model_core_fp16.param.bin');
+test('parseAllenkFdncnnParam should decode the extracted allenk FDnCNN graph', async (t) => {
+    const fixture = await readExtractedAllenkFdncnnFixture(t);
+    if (!fixture) return;
+
+    const { paramBin } = fixture;
     const parsed = parseAllenkFdncnnParam(paramBin);
 
     assert.equal(parsed.magic, NCNN_BINARY_PARAM_MAGIC);
@@ -36,9 +56,11 @@ test('parseAllenkFdncnnParam should decode the extracted allenk FDnCNN graph', a
     assert.equal(parsed.layers[20].convolution.activationType, 0);
 });
 
-test('buildAllenkFdncnnWeightLayout should map every layer into the extracted weight bin', async () => {
-    const paramBin = await readFile('.artifacts/allenk-fdncnn/model_core_fp16.param.bin');
-    const weightBin = await readFile('.artifacts/allenk-fdncnn/model_core_fp16.bin');
+test('buildAllenkFdncnnWeightLayout should map every layer into the extracted weight bin', async (t) => {
+    const fixture = await readExtractedAllenkFdncnnFixture(t, { weight: true });
+    if (!fixture) return;
+
+    const { paramBin, weightBin } = fixture;
     const parsed = parseAllenkFdncnnParam(paramBin);
     const layout = buildAllenkFdncnnWeightLayout(parsed, weightBin);
 
@@ -71,9 +93,11 @@ test('buildAllenkFdncnnWeightLayout should map every layer into the extracted we
     assert.equal(layout.segments[19].activationType, 0);
 });
 
-test('summarizeAllenkFdncnnModel should expose a compact browser-backend contract', async () => {
-    const paramBin = await readFile('.artifacts/allenk-fdncnn/model_core_fp16.param.bin');
-    const weightBin = await readFile('.artifacts/allenk-fdncnn/model_core_fp16.bin');
+test('summarizeAllenkFdncnnModel should expose a compact browser-backend contract', async (t) => {
+    const fixture = await readExtractedAllenkFdncnnFixture(t, { weight: true });
+    if (!fixture) return;
+
+    const { paramBin, weightBin } = fixture;
     const parsed = parseAllenkFdncnnParam(paramBin);
     const layout = buildAllenkFdncnnWeightLayout(parsed, weightBin);
 
@@ -93,9 +117,11 @@ test('summarizeAllenkFdncnnModel should expose a compact browser-backend contrac
     });
 });
 
-test('buildAllenkFdncnnWeightLayout should fail when weight storage does not match FP16 NCNN layout', async () => {
-    const paramBin = await readFile('.artifacts/allenk-fdncnn/model_core_fp16.param.bin');
-    const weightBin = await readFile('.artifacts/allenk-fdncnn/model_core_fp16.bin');
+test('buildAllenkFdncnnWeightLayout should fail when weight storage does not match FP16 NCNN layout', async (t) => {
+    const fixture = await readExtractedAllenkFdncnnFixture(t, { weight: true });
+    if (!fixture) return;
+
+    const { paramBin, weightBin } = fixture;
     const parsed = parseAllenkFdncnnParam(paramBin);
     const corrupted = new Uint8Array(weightBin);
     corrupted[0] = 0;
