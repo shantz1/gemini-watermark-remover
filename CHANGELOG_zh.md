@@ -7,11 +7,14 @@
 - 修复 issue #77 报告的浏览器视频 ONNX runtime 尺寸不匹配问题：小尺寸水印改走 104px FDnCNN 模型，标准或未知水印继续走 200px 模型。
 - 新增固定 shape ROI 规划和 resize fallback，确保所有视频水印候选送入 ONNX runtime 前都符合所选模型的输入尺寸。
 - 将 runtime padding fallback 下沉到视频导出层，让直接调用视频导出接口时也能避开同类固定 shape 不匹配。
+- 修复本地 Before / After 视频预览对竖屏视频的裁切问题，确保右下角水印区域在审查时保持可见。
+- 收紧 Veo 文字水印检测的搜索范围，并加入协作式进度让出，避免检测期间页面长时间假死。
 
 ### 质量
 
 - 补充覆盖视频水印目录的回归测试，包括 standard、inset、compact、scaled、portrait、4K、超大 8K 和极小画布 ROI 场景。
 - 增加发版安全检查，防止视频页和官网 runtime bundle 退回固定 200px 模型或写死 64px padding 的旧路径。
+- 明确公开发布口径：当前图片默认链路和受门控的图片改进可以发布；视频清理在发版 gate 提升前仍按 review-scoped 能力描述。
 
 ## 1.0.22 - 2026-06-14
 

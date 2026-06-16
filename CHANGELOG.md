@@ -7,11 +7,14 @@
 - Fixed the browser video ONNX runtime shape mismatch reported in issue #77 by routing small watermarks to the 104px FDnCNN model and standard or unknown watermarks to the 200px model.
 - Added fixed-shape ROI planning and resize fallbacks so every detected video watermark candidate feeds the ONNX runtime with the selected model's expected input size.
 - Moved the runtime padding fallback into the video export layer so direct video exports avoid the same fixed-shape mismatch.
+- Fixed portrait video framing in the local before/after preview so the bottom-right watermark region remains visible during review.
+- Reduced Veo text watermark detection search work and added cooperative progress yielding so the video page stays responsive while detection is running.
 
 ### Quality
 
 - Added regression coverage across the video watermark catalog, including standard, inset, compact, scaled, portrait, 4K, oversized 8K, and undersized-canvas ROI cases.
 - Added release-safety checks to prevent the video app and website runtime bundle from returning to a fixed 200px model or hard-coded 64px padding path.
+- Clarified the release scope for public notes: current image defaults and guarded image improvements are releasable, while video cleanup remains review-scoped until the release gates promote it.
 
 ## 1.0.22 - 2026-06-14
 

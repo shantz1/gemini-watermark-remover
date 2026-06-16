@@ -522,10 +522,10 @@ async function summarizeReleaseVersionDocs(packageArtifact, {
         releaseZhMentionsBothChangelogs: /CHANGELOG\.md/.test(artifacts.releaseZh.text) && /CHANGELOG_zh\.md/.test(artifacts.releaseZh.text),
         releaseEnMentionsExtensionPackage: /pnpm package:extension/.test(artifacts.releaseEn.text) && /latest-extension\.json/.test(artifacts.releaseEn.text),
         releaseZhMentionsExtensionPackage: /pnpm package:extension/.test(artifacts.releaseZh.text) && /latest-extension\.json/.test(artifacts.releaseZh.text),
-        releaseEnMentionsAllenkV2Comparison: /pnpm compare:allenk-v2/.test(artifacts.releaseEn.text),
-        releaseZhMentionsAllenkV2Comparison: /pnpm compare:allenk-v2/.test(artifacts.releaseZh.text),
-        releaseEnMentionsAllenkFailGate: /--fail-on-incomplete/.test(artifacts.releaseEn.text),
-        releaseZhMentionsAllenkFailGate: /--fail-on-incomplete/.test(artifacts.releaseZh.text),
+        releaseEnMentionsInternalComparisonGate: /internal comparison gate/i.test(artifacts.releaseEn.text),
+        releaseZhMentionsInternalComparisonGate: /内部对比 gate/.test(artifacts.releaseZh.text),
+        releaseEnMentionsInternalComparisonFailGate: /--fail-on-incomplete/.test(artifacts.releaseEn.text),
+        releaseZhMentionsInternalComparisonFailGate: /--fail-on-incomplete/.test(artifacts.releaseZh.text),
         releaseEnMentionsReadinessGate: /pnpm release:readiness/.test(artifacts.releaseEn.text),
         releaseZhMentionsReadinessGate: /pnpm release:readiness/.test(artifacts.releaseZh.text),
         releaseEnMentionsReadinessFailGate: /--fail-on-not-ready/.test(artifacts.releaseEn.text),
@@ -562,7 +562,7 @@ async function summarizeReleaseVersionDocs(packageArtifact, {
         },
         releaseNotes: blockers.length === 0
             ? [
-                '当前 package version 已记录在中英文 changelog，release checklist 覆盖 changelog、extension package artifact、allenk V2 comparison、release readiness gate、一键 release preflight / quality gate 与 Release Claim Matrix。'
+                '当前 package version 已记录在中英文 changelog，release checklist 覆盖 changelog、extension package artifact、内部对比 gate、release readiness gate、一键 release preflight / quality gate 与 Release Claim Matrix。'
             ]
             : [
                 '版本文档或发版清单未覆盖当前版本；发布前需要补齐 changelog / release checklist。'

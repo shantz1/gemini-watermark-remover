@@ -26,14 +26,21 @@ Expected result:
 - package/sdk entrypoints in `package.json` still match the published source layout
 - generated userscript metadata uses the current `package.json` version
 - Chrome extension release zip, sha256 file, and `latest-extension.json` are regenerated in `release/` for GitHub Release and manual fallback installs
-- allenk V2 comparison reports `current-gap-known`
+- the internal comparison gate reports `current-gap-known`
 - `pnpm release:preflight` runs `pnpm test`, `pnpm build`, `pnpm package:extension`, `pnpm release:quality-gate`, and `pnpm release:goal-audit -- --fail-on-incomplete` in order
-- `pnpm release:quality-gate` runs `pnpm compare:allenk-v2 -- --fail-on-incomplete` before `pnpm release:readiness -- --fail-on-not-ready`
+- `pnpm release:quality-gate` runs the internal comparison gate before `pnpm release:readiness -- --fail-on-not-ready`
 - `pnpm release:goal-audit` reports `goal achieved: yes` for the scoped RC objective
 - broader video quality claims remain blocked unless the video gates are promoted
 - release readiness reports `rc-current-image-defaults-with-scoped-claims` before publishing a scoped image RC
 - release notes follow the `Release Claim Matrix`: publish only `allowed`, `allowed-scoped`, or `allowed-safety-only` rows, and keep `review-only`, `experiment-only`, and `forbidden` rows out of public capability claims
 - the unpacked extension in `dist/extension` is a local test build; the official release manifest is written only into the zip in `release/`
+
+## Public Release Wording
+
+- Keep public notes focused on user-visible fixes, supported release surfaces, and scoped capability claims.
+- Do not mention internal benchmark names, implementation research notes, or unshipped comparison claims in public release notes.
+- For the current gate result, describe video cleanup as review-scoped or experimental unless a later gate explicitly promotes it.
+- Do not call the build a full stable/general-availability release while readiness still reports `rc-current-image-defaults-with-scoped-claims`.
 
 ## Release Metadata
 

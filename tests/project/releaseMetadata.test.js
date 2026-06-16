@@ -46,7 +46,7 @@ test('release checklists should include the Chrome extension package artifacts',
     assert.match(releaseZh, /官网/);
 });
 
-test('release checklists should require allenk comparison and readiness gates', async () => {
+test('release checklists should require internal comparison and readiness gates', async () => {
     const packageJson = JSON.parse(await readText('package.json'));
     const [releaseEn, releaseZh] = await Promise.all([
         readText('RELEASE.md'),
@@ -67,14 +67,16 @@ test('release checklists should require allenk comparison and readiness gates', 
     assert.match(releaseEn, /pnpm release:preflight/);
     assert.match(releaseEn, /pnpm release:goal-audit/);
     assert.match(releaseEn, /pnpm release:quality-gate/);
-    assert.match(releaseEn, /pnpm compare:allenk-v2/);
+    assert.match(releaseEn, /internal comparison gate/);
+    assert.doesNotMatch(releaseEn, /pnpm compare:allenk-v2/);
     assert.match(releaseEn, /--fail-on-incomplete/);
     assert.match(releaseEn, /pnpm release:readiness/);
     assert.match(releaseEn, /--fail-on-not-ready/);
     assert.match(releaseZh, /pnpm release:preflight/);
     assert.match(releaseZh, /pnpm release:goal-audit/);
     assert.match(releaseZh, /pnpm release:quality-gate/);
-    assert.match(releaseZh, /pnpm compare:allenk-v2/);
+    assert.match(releaseZh, /内部对比 gate/);
+    assert.doesNotMatch(releaseZh, /pnpm compare:allenk-v2/);
     assert.match(releaseZh, /--fail-on-incomplete/);
     assert.match(releaseZh, /pnpm release:readiness/);
     assert.match(releaseZh, /--fail-on-not-ready/);
