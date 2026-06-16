@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.24 - 2026-06-16
+
+### Video
+
+- Improved Veo text watermark detection for stable low-contrast vertical videos, including the newly added Tibet scenery sample.
+- Kept detection conservative by requiring repeated default-template evidence plus at least one strong frame before accepting a low-contrast text watermark.
+
+### Quality
+
+- Added regression coverage for intermittent low-contrast Veo text evidence.
+- Re-verified the new 720p, 720x1280, and Veo text sample set through the local video UI preset exporter.
+
 ## 1.0.23 - 2026-06-14
 
 ### Video

@@ -5,6 +5,8 @@ const DEFAULT_VOTE_RATIO = 0.6;
 const DEFAULT_ACTIVE_THRESHOLD = 0.02;
 const DEFAULT_MARGIN_RADIUS_MIN = 4;
 const DEFAULT_MARGIN_RADIUS_SCALE = 0.35;
+const STABLE_LOW_CONTRAST_VOTE_RATIO = 0.8;
+const STABLE_LOW_CONTRAST_MEAN_NCC_SCALE = 0.68;
 
 function clampInteger(value, min, max) {
     return Math.max(min, Math.min(max, Math.round(value)));
@@ -183,6 +185,17 @@ function isDefaultTemplateCandidate(summary) {
     );
 }
 
+function hasStableLowContrastEvidence(summary, effectiveMinNcc, minVoteRatio) {
+    if (!isDefaultTemplateCandidate(summary)) return false;
+    const requiredVoteRatio = Math.max(minVoteRatio, STABLE_LOW_CONTRAST_VOTE_RATIO);
+    const requiredMeanNcc = effectiveMinNcc * STABLE_LOW_CONTRAST_MEAN_NCC_SCALE;
+    return (
+        summary.voteRatio >= requiredVoteRatio &&
+        summary.maxNcc >= effectiveMinNcc &&
+        summary.meanNcc >= requiredMeanNcc
+    );
+}
+
 function formatVeoTextCandidateSummary(summary) {
     return {
         candidateId: summary.candidate.id,
@@ -261,7 +274,10 @@ function buildVeoTextDetectionResult({
     const effectiveMinNcc = Number.isFinite(best.candidate.template.minNcc)
         ? Math.min(minNcc, best.candidate.template.minNcc)
         : minNcc;
-    const isConfident = best.meanNcc >= effectiveMinNcc && best.voteRatio >= minVoteRatio;
+    const isConfident = (
+        best.meanNcc >= effectiveMinNcc &&
+        best.voteRatio >= minVoteRatio
+    ) || hasStableLowContrastEvidence(best, effectiveMinNcc, minVoteRatio);
     const position = {
         x: best.candidate.x,
         y: best.candidate.y,
