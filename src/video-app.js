@@ -765,7 +765,7 @@ function applyDebugControlOverrides() {
 function applyRelocatedReviewPreset() {
     const preset = getRelocatedReviewPresetConfig();
     applyPresetToControls(preset);
-    setStatus('已应用迁移锚点复核预设：匹配 Delta 0.25、12Mbps、允许低置信。此预设用于人工复核，不是默认策略。', 'warn');
+    setStatus('已应用迁移锚点复核预设：Canvas 足迹抛光、12Mbps、允许低置信。此预设用于人工复核，不是默认策略。', 'warn');
 }
 
 function setupEvents() {

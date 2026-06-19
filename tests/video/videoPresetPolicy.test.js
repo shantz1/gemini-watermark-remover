@@ -44,7 +44,7 @@ test('shouldUseRelocatedReviewPreset should require confident relocated detectio
     }, { width: 1920, height: 1080 }), true);
 });
 
-test('getRelocatedReviewPresetConfig should keep relocated anchors on the AI path', () => {
+test('getRelocatedReviewPresetConfig should keep relocated anchors on the footprint polish path', () => {
     assert.deepEqual({
         label: getRelocatedReviewPresetConfig().label,
         denoiseBackend: getRelocatedReviewPresetConfig().denoiseBackend,
@@ -54,9 +54,9 @@ test('getRelocatedReviewPresetConfig should keep relocated anchors on the AI pat
         allowLowConfidence: getRelocatedReviewPresetConfig().allowLowConfidence
     }, {
         label: 'AI 自动处理',
-        denoiseBackend: VIDEO_DENOISE_BACKENDS.ALLENK_FDNCNN_BROWSER_SPIKE,
-        edgeDenoiseStrength: 1.8,
-        residualCleanupStrength: 0.4,
+        denoiseBackend: VIDEO_DENOISE_BACKENDS.CANVAS_FOOTPRINT_POLISH,
+        edgeDenoiseStrength: 1,
+        residualCleanupStrength: 1.2,
         videoBitrateMbps: 12,
         allowLowConfidence: true
     });
@@ -96,5 +96,5 @@ test('getAutomaticVideoPresetConfig should switch relocated detections to review
     }, { width: 1920, height: 1080 });
 
     assert.equal(preset.id, 'relocated-review');
-    assert.equal(preset.denoiseBackend, VIDEO_DENOISE_BACKENDS.ALLENK_FDNCNN_BROWSER_SPIKE);
+    assert.equal(preset.denoiseBackend, VIDEO_DENOISE_BACKENDS.CANVAS_FOOTPRINT_POLISH);
 });
