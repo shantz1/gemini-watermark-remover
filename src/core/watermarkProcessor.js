@@ -189,6 +189,23 @@ const CANONICAL_96_MODERATE_SIGNAL_MIN_ORIGINAL_SPATIAL = 0.4;
 const CANONICAL_96_MODERATE_SIGNAL_MIN_ORIGINAL_GRADIENT = 0.1;
 const CANONICAL_96_MODERATE_SIGNAL_MAX_CURRENT_SPATIAL = 0.26;
 const CANONICAL_96_MODERATE_SIGNAL_MAX_CURRENT_GRADIENT = 0.04;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_ORIGINAL_SPATIAL = 0.4;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_ORIGINAL_GRADIENT = 0.3;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_ABS_CURRENT_SPATIAL = 0.12;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_CURRENT_GRADIENT = 0.08;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_HALO = 6;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_HALO_REDUCTION = 4;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_POSITIVE_HALO = 2.3;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_ALPHA_GAIN = 1;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_RADIUS = 56;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_MIN_ALPHA = 0.08;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_THRESHOLD = 3;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_STRENGTH = 1;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_GAMMA = 0.7;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_SPATIAL = 0.18;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_GRADIENT = 0.08;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_VISUAL_ARTIFACT = 0.07;
+const CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_NEWLY_CLIPPED = 0.01;
 const CATALOG_ALPHA_DARK_FINE_TUNE_MIN_ORIGINAL_SPATIAL = 0.6;
 const CATALOG_ALPHA_DARK_FINE_TUNE_MIN_ORIGINAL_GRADIENT = 0.45;
 const CATALOG_ALPHA_DARK_FINE_TUNE_MAX_NEGATIVE_RESIDUAL = -0.12;
@@ -2473,6 +2490,177 @@ function shouldSkipLocatedAggressiveForCleanCanonical96({
     );
 }
 
+function isCanonical96Config(config) {
+    return config?.logoSize === 96 &&
+        config.marginRight === 64 &&
+        config.marginBottom === 64;
+}
+
+function luminanceAt(imageData, pixelIndex) {
+    return 0.2126 * imageData.data[pixelIndex] +
+        0.7152 * imageData.data[pixelIndex + 1] +
+        0.0722 * imageData.data[pixelIndex + 2];
+}
+
+function repairCanonical96DarkClipResidual({ sourceImageData, priorImageData, alphaMap, position }) {
+    const candidate = cloneImageData(sourceImageData);
+
+    for (let row = 0; row < position.height; row++) {
+        for (let col = 0; col < position.width; col++) {
+            const localIndex = row * position.width + col;
+            const alpha = alphaMap[localIndex] ?? 0;
+            if (alpha < CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_MIN_ALPHA) continue;
+
+            const pixelIndex = ((position.y + row) * candidate.width + position.x + col) * 4;
+            const sourceLum = luminanceAt(sourceImageData, pixelIndex);
+            const priorLum = luminanceAt(priorImageData, pixelIndex);
+            if (priorLum - sourceLum < CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_THRESHOLD) {
+                continue;
+            }
+
+            const blend = clamp01(
+                Math.pow(alpha, CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_GAMMA) *
+                CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_STRENGTH
+            );
+            if (blend <= 0.005) continue;
+
+            for (let channel = 0; channel < 3; channel++) {
+                candidate.data[pixelIndex + channel] = clampChannel(
+                    sourceImageData.data[pixelIndex + channel] * (1 - blend) +
+                    priorImageData.data[pixelIndex + channel] * blend
+                );
+            }
+        }
+    }
+
+    return candidate;
+}
+
+function refineCanonical96PositiveHaloResidual({
+    originalImageData,
+    currentImageData,
+    currentAlphaMap,
+    currentPosition,
+    currentConfig,
+    currentSpatialScore,
+    currentGradientScore,
+    currentAlphaGain,
+    originalSpatialScore,
+    originalGradientScore
+}) {
+    if (
+        !isCanonical96Config(currentConfig) ||
+        currentPosition?.width !== 96 ||
+        currentPosition?.height !== 96 ||
+        originalSpatialScore < CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_ORIGINAL_SPATIAL ||
+        originalGradientScore < CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_ORIGINAL_GRADIENT ||
+        Math.abs(currentSpatialScore) > CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_ABS_CURRENT_SPATIAL ||
+        currentGradientScore > CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_CURRENT_GRADIENT
+    ) {
+        return null;
+    }
+
+    const baselineVisibility = assessWatermarkResidualVisibility({
+        imageData: currentImageData,
+        position: currentPosition,
+        alphaMap: currentAlphaMap
+    });
+    if (
+        baselineVisibility?.visiblePositiveHalo !== true ||
+        (baselineVisibility.positiveHaloLum ?? 0) < CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_HALO
+    ) {
+        return null;
+    }
+
+    const alphaMap = currentAlphaMap;
+    const baseImageData = cloneImageData(originalImageData);
+    removeWatermark(baseImageData, alphaMap, currentPosition, {
+        alphaGain: CANONICAL_96_POSITIVE_HALO_RESCUE_ALPHA_GAIN
+    });
+    const priorImageData = buildPreviewNeighborhoodPrior({
+        previewImageData: baseImageData,
+        position: currentPosition,
+        radius: CANONICAL_96_POSITIVE_HALO_RESCUE_REPAIR_RADIUS
+    });
+    const imageData = repairCanonical96DarkClipResidual({
+        sourceImageData: baseImageData,
+        priorImageData,
+        alphaMap,
+        position: currentPosition
+    });
+
+    const spatialScore = computeRegionSpatialCorrelation({
+        imageData,
+        alphaMap,
+        region: { x: currentPosition.x, y: currentPosition.y, size: currentPosition.width }
+    });
+    const gradientScore = computeRegionGradientCorrelation({
+        imageData,
+        alphaMap,
+        region: { x: currentPosition.x, y: currentPosition.y, size: currentPosition.width }
+    });
+    const residualVisibility = assessWatermarkResidualVisibility({
+        imageData,
+        position: currentPosition,
+        alphaMap
+    });
+    const artifacts = assessRemovalDiffArtifacts({
+        originalImageData,
+        candidateImageData: imageData,
+        alphaMap,
+        position: currentPosition,
+        alphaGain: CANONICAL_96_POSITIVE_HALO_RESCUE_ALPHA_GAIN
+    });
+
+    const haloReduction = (baselineVisibility.positiveHaloLum ?? 0) -
+        (residualVisibility?.positiveHaloLum ?? 0);
+    if (
+        residualVisibility?.visible !== false ||
+        (residualVisibility.positiveHaloLum ?? 0) > CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_POSITIVE_HALO ||
+        haloReduction < CANONICAL_96_POSITIVE_HALO_RESCUE_MIN_HALO_REDUCTION ||
+        Math.abs(spatialScore) > CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_SPATIAL ||
+        gradientScore > CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_GRADIENT ||
+        (artifacts?.visualArtifactCost ?? 0) > CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_VISUAL_ARTIFACT ||
+        (artifacts?.newlyClippedRatio ?? 0) > CANONICAL_96_POSITIVE_HALO_RESCUE_MAX_NEWLY_CLIPPED
+    ) {
+        return null;
+    }
+
+    const originalSpatial = computeRegionSpatialCorrelation({
+        imageData: originalImageData,
+        alphaMap,
+        region: { x: currentPosition.x, y: currentPosition.y, size: currentPosition.width }
+    });
+    const originalGradient = computeRegionGradientCorrelation({
+        imageData: originalImageData,
+        alphaMap,
+        region: { x: currentPosition.x, y: currentPosition.y, size: currentPosition.width }
+    });
+    const balancedVisual = scoreBalancedVisualCandidate({
+        processedSpatial: spatialScore,
+        processedGradient: gradientScore,
+        newlyClippedRatio: artifacts?.newlyClippedRatio,
+        visualArtifactCost: artifacts?.visualArtifactCost
+    });
+
+    return {
+        imageData,
+        alphaMap,
+        position: currentPosition,
+        config: currentConfig,
+        alphaGain: CANONICAL_96_POSITIVE_HALO_RESCUE_ALPHA_GAIN,
+        originalSpatialScore: originalSpatial,
+        originalGradientScore: originalGradient,
+        spatialScore,
+        gradientScore,
+        residualVisibility,
+        artifacts,
+        haloReduction,
+        suppressionGain: originalSpatial - spatialScore,
+        cost: balancedVisual.score
+    };
+}
+
 function shouldRelocateSmallFixedLocalAnchor({
     source,
     config,
@@ -4505,6 +4693,44 @@ export function processWatermarkImageData(imageData, options = {}) {
                 ? source
                 : `${source}+located-aggressive`;
         }
+    }
+
+    const canonical96PositiveHaloRescue = refineCanonical96PositiveHaloResidual({
+        originalImageData,
+        currentImageData: finalImageData,
+        currentAlphaMap: alphaMap,
+        currentPosition: position,
+        currentConfig: config,
+        currentSpatialScore: finalProcessedSpatialScore,
+        currentGradientScore: finalProcessedGradientScore,
+        currentAlphaGain: alphaGain,
+        originalSpatialScore,
+        originalGradientScore
+    });
+    if (canonical96PositiveHaloRescue) {
+        recordAlphaAdjustmentStage({
+            stage: 'canonical-96-positive-halo-rescue',
+            fromAlphaGain: alphaGain,
+            toAlphaGain: canonical96PositiveHaloRescue.alphaGain,
+            beforeSpatialScore: finalProcessedSpatialScore,
+            beforeGradientScore: finalProcessedGradientScore,
+            afterSpatialScore: canonical96PositiveHaloRescue.spatialScore,
+            afterGradientScore: canonical96PositiveHaloRescue.gradientScore,
+            suppressionGain: canonical96PositiveHaloRescue.suppressionGain,
+            cost: canonical96PositiveHaloRescue.cost,
+            allowSameAlphaGain: true
+        });
+        finalImageData = canonical96PositiveHaloRescue.imageData;
+        alphaMap = canonical96PositiveHaloRescue.alphaMap;
+        position = canonical96PositiveHaloRescue.position;
+        config = canonical96PositiveHaloRescue.config;
+        alphaGain = canonical96PositiveHaloRescue.alphaGain;
+        originalSpatialScore = canonical96PositiveHaloRescue.originalSpatialScore;
+        originalGradientScore = canonical96PositiveHaloRescue.originalGradientScore;
+        finalProcessedSpatialScore = canonical96PositiveHaloRescue.spatialScore;
+        finalProcessedGradientScore = canonical96PositiveHaloRescue.gradientScore;
+        suppressionGain = canonical96PositiveHaloRescue.suppressionGain;
+        source = `${source}+canonical-96-positive-halo-rescue`;
     }
 
     const smoothPriorStartedAt = nowMs();

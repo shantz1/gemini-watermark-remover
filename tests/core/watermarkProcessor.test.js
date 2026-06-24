@@ -802,6 +802,38 @@ test('processWatermarkImageData should rescue dark halo residuals with conservat
     }
 });
 
+test('processWatermarkImageData should rescue issue 93 canonical 96px positive halo residual', async () => {
+    const alpha48 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_48.png')));
+    const alpha96 = calculateAlphaMap(await decodeImageDataInNode(path.resolve('src/assets/bg_96.png')));
+    const imageData = await decodeImageDataInNode(path.resolve('tests/fixtures/issue93-canonical96-positive-halo.png'));
+
+    const result = processWatermarkImageData(imageData, {
+        alpha48,
+        alpha96,
+        getAlphaMap: (size) => size === 48 ? alpha48 : size === 96 ? alpha96 : interpolateAlphaMap(alpha96, 96, size)
+    });
+
+    assert.equal(result.meta.applied, true, `skipReason=${result.meta.skipReason}`);
+    assert.deepEqual(result.meta.config, { logoSize: 96, marginRight: 64, marginBottom: 64 });
+    assert.ok(
+        String(result.meta.source).includes('+canonical-96-positive-halo-rescue'),
+        `expected canonical 96 positive halo rescue, source=${result.meta.source}`
+    );
+    assert.equal(
+        result.meta.detection.residualVisibility?.visible,
+        false,
+        `expected no visible residual, visibility=${JSON.stringify(result.meta.detection.residualVisibility)}`
+    );
+    assert.ok(
+        Math.abs(result.meta.detection.processedSpatialScore) <= 0.18,
+        `expected bounded spatial residual, detection=${JSON.stringify(result.meta.detection)}`
+    );
+    assert.ok(
+        result.meta.detection.processedGradientScore <= 0.08,
+        `expected bounded gradient residual, detection=${JSON.stringify(result.meta.detection)}`
+    );
+});
+
 test('processWatermarkImageData should allow stronger mid-alpha on strong 48px large-margin residuals', async (t) => {
     const samplePath = externalSamplePath('样本/Gemini_Generated_Image_n79y30n79y30n79y.png');
     try {
