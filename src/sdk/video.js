@@ -255,6 +255,9 @@ async function processVideoWithPreviewPage(inputPath, options = {}) {
                 await setNumericInputValue(page, '#residualCleanup', value);
             }
             if (Number.isFinite(videoBitrate) && videoBitrate > 0) {
+                await page.evaluate((value) => {
+                    window.__gwrVideoOverrideBitrate = value;
+                }, videoBitrate);
                 await setNumericInputValue(page, '#videoBitrateMbps', videoBitrate / 1000 / 1000);
             }
 

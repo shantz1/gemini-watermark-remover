@@ -18,6 +18,7 @@ import {
     getRelocatedReviewPresetConfig
 } from './video/videoPresetPolicy.js';
 import { resolveAllenkFdncnnRuntimeProfile } from './video/videoDenoiseRuntimePolicy.js';
+import { applyVideoBitrateDebugOverride } from './video/videoDebugControlOverrides.js';
 import {
     consumeDebugFileHandoff,
     getDebugFileKind,
@@ -760,6 +761,11 @@ function applyDebugControlOverrides() {
             Math.max(0, Math.min(1.8, window.__gwrVideoOverrideResidualCleanupStrength))
         );
     }
+    applyVideoBitrateDebugOverride({
+        windowObject: window,
+        videoBitrateInput: els.videoBitrateMbps,
+        setNumberControl
+    });
 }
 
 function applyRelocatedReviewPreset() {

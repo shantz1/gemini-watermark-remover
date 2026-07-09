@@ -551,13 +551,42 @@ function getLocalMeanRgb(data, width, height, x, y, channel) {
     return count > 0 ? sum / count : data[(y * width + x) * 4 + channel];
 }
 
+function lumaAt(data, idx) {
+    return 0.2126 * data[idx] + 0.7152 * data[idx + 1] + 0.0722 * data[idx + 2];
+}
+
+function buildAllenkSourceStructureGuard(data, width, height) {
+    const guard = new Float32Array(width * height);
+    const sample = (x, y) => {
+        const xx = clamp(x, 0, width - 1);
+        const yy = clamp(y, 0, height - 1);
+        return lumaAt(data, (yy * width + xx) * 4);
+    };
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const gx =
+                -sample(x - 1, y - 1) - 2 * sample(x - 1, y) - sample(x - 1, y + 1) +
+                sample(x + 1, y - 1) + 2 * sample(x + 1, y) + sample(x + 1, y + 1);
+            const gy =
+                -sample(x - 1, y - 1) - 2 * sample(x, y - 1) - sample(x + 1, y - 1) +
+                sample(x - 1, y + 1) + 2 * sample(x, y + 1) + sample(x + 1, y + 1);
+            const gradient = Math.sqrt(gx * gx + gy * gy);
+            guard[y * width + x] = clamp((gradient - 48) / (160 - 48), 0, 1);
+        }
+    }
+
+    return guard;
+}
+
 function blendAllenkDenoisedRoi({
     originalData,
     denoisedData,
     weights,
     width = 0,
     height = 0,
-    preserveHighpassStrength = 0
+    preserveHighpassStrength = 0,
+    protectStructure = false
 } = {}) {
     if (!originalData || !denoisedData || !weights || originalData.length !== denoisedData.length) {
         return new Uint8ClampedArray(originalData || 0);
@@ -565,18 +594,28 @@ function blendAllenkDenoisedRoi({
 
     const output = new Uint8ClampedArray(originalData);
     const pixelCount = Math.min(weights.length, Math.floor(originalData.length / 4));
-    const canPreserveHighpass = (
-        Number.isFinite(preserveHighpassStrength) &&
-        preserveHighpassStrength > 0 &&
+    const canUseSpatialContext = (
         Number.isFinite(width) &&
         Number.isFinite(height) &&
         width > 0 &&
         height > 0 &&
         width * height <= pixelCount
     );
+    const canPreserveHighpass = (
+        Number.isFinite(preserveHighpassStrength) &&
+        preserveHighpassStrength > 0 &&
+        canUseSpatialContext
+    );
+    const structureGuard = protectStructure && canUseSpatialContext
+        ? buildAllenkSourceStructureGuard(originalData, width, height)
+        : null;
 
     for (let pixel = 0; pixel < pixelCount; pixel++) {
-        const weight = clamp(weights[pixel] || 0, 0, 1);
+        const rawWeight = clamp(weights[pixel] || 0, 0, 1);
+        const structureFactor = structureGuard
+            ? Math.max(0.08, 1 - (structureGuard[pixel] || 0) * 0.92)
+            : 1;
+        const weight = rawWeight * structureFactor;
         if (weight <= 0) continue;
 
         const idx = pixel * 4;

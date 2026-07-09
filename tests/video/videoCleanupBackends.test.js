@@ -489,6 +489,94 @@ test('applyVideoResidualCleanup should run injected allenk FDnCNN runtime on the
     assert.ok(written.data.some((value, index) => index % 4 === 0 && value > 40));
 });
 
+test('applyVideoResidualCleanup should protect background transitions from Allenk dark artifacts', () => {
+    const width = 8;
+    const height = 6;
+    const source = {
+        width,
+        height,
+        data: new Uint8ClampedArray(width * height * 4)
+    };
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4;
+            const value = x < 4 ? 64 : 184;
+            source.data[idx] = value;
+            source.data[idx + 1] = value;
+            source.data[idx + 2] = value;
+            source.data[idx + 3] = 255;
+        }
+    }
+
+    const alphaMap = new Float32Array(width * height);
+    for (let y = 1; y < height - 1; y++) {
+        alphaMap[y * width + 3] = 0.28;
+        alphaMap[y * width + 4] = 0.28;
+    }
+
+    let written = null;
+    const runtime = {
+        id: 'dark-artifact-runtime',
+        denoiseImageData({ imageData }) {
+            const data = new Uint8ClampedArray(imageData.data);
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = 20;
+                data[i + 1] = 20;
+                data[i + 2] = 20;
+            }
+            return {
+                runtime: 'dark-artifact-runtime',
+                imageData: {
+                    width: imageData.width,
+                    height: imageData.height,
+                    data
+                }
+            };
+        }
+    };
+    const ctx = {
+        canvas: { width, height },
+        getImageData(x, y, w, h) {
+            assert.equal(x, 0);
+            assert.equal(y, 0);
+            assert.equal(w, width);
+            assert.equal(h, height);
+            return {
+                width,
+                height,
+                data: new Uint8ClampedArray(source.data)
+            };
+        },
+        putImageData(imageData, x, y) {
+            assert.equal(x, 0);
+            assert.equal(y, 0);
+            written = imageData;
+        }
+    };
+
+    const result = applyVideoResidualCleanup(ctx, {
+        x: 0,
+        y: 0,
+        width,
+        height
+    }, alphaMap, {
+        residualCleanupStrength: 0,
+        denoiseBackend: VIDEO_DENOISE_BACKENDS.ALLENK_FDNCNN_BROWSER_SPIKE,
+        edgeDenoiseStrength: 1,
+        allenkFdncnnRuntime: runtime,
+        allenkFdncnnPadding: 0
+    });
+
+    assert.equal(result.denoiseRuntimeStatus, 'applied');
+    const flatPixel = (3 * width + 2) * 4;
+    const transitionPixel = (3 * width + 4) * 4;
+    assert.ok(written.data[flatPixel] < source.data[flatPixel] - 8, `flat=${written.data[flatPixel]}`);
+    assert.ok(
+        written.data[transitionPixel] > source.data[transitionPixel] - 28,
+        `transition=${written.data[transitionPixel]}, source=${source.data[transitionPixel]}`
+    );
+});
+
 test('applyVideoResidualCleanup should expand small video ROIs to the fixed allenk runtime shape', () => {
     let runtimeCalls = 0;
     let written = null;

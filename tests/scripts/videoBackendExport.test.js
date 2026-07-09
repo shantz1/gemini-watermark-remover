@@ -12,6 +12,7 @@ test('export-video-backend-variant should report actual UI controls after auto p
   assert.doesNotMatch(source, /locator\('#alphaGain'\)\.fill/);
   assert.match(source, /actualDenoiseBackend: actualControls\.denoiseBackend/);
   assert.match(source, /allowLowConfidence/);
+  assert.match(source, /__gwrVideoOverrideBitrate/);
   assert.match(source, /withLocalStaticPreviewPage/);
   assert.match(source, /pageUrl/);
 });

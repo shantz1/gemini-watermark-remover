@@ -40,6 +40,12 @@ const DEFAULT_AVC_HARDWARE_ACCELERATION = 'no-preference';
 const DEFAULT_VIDEO_LATENCY_MODE = 'quality';
 const DEFAULT_VIDEO_BITRATE_MODE = 'constant';
 const DEFAULT_VIDEO_CONTENT_HINT = 'detail';
+const DEFAULT_VIDEO_COLOR_SPACE = Object.freeze({
+    primaries: 'bt709',
+    transfer: 'bt709',
+    matrix: 'bt709',
+    fullRange: false
+});
 const ALPHA_REFINEMENT_ROUNDS = 5;
 const ALPHA_FRAME_STEP_CAP = 0.05;
 const FRAME_HIGH_CONFIDENCE = 0.14;
@@ -133,6 +139,11 @@ function resolveVideoBitrate(value) {
     return Number.isFinite(bitrate) && bitrate > 0 ? bitrate : DEFAULT_VIDEO_BITRATE;
 }
 
+export function applyVideoExportDecoderColorSpace(_packet, meta) {
+    if (!meta?.decoderConfig || typeof meta.decoderConfig !== 'object') return;
+    meta.decoderConfig.colorSpace = { ...DEFAULT_VIDEO_COLOR_SPACE };
+}
+
 export function createVideoExportEncodingConfig(videoBitrate) {
     return {
         codec: 'avc',
@@ -142,7 +153,8 @@ export function createVideoExportEncodingConfig(videoBitrate) {
         latencyMode: DEFAULT_VIDEO_LATENCY_MODE,
         bitrateMode: DEFAULT_VIDEO_BITRATE_MODE,
         hardwareAcceleration: DEFAULT_AVC_HARDWARE_ACCELERATION,
-        contentHint: DEFAULT_VIDEO_CONTENT_HINT
+        contentHint: DEFAULT_VIDEO_CONTENT_HINT,
+        onEncodedPacket: applyVideoExportDecoderColorSpace
     };
 }
 

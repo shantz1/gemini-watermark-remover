@@ -287,6 +287,9 @@ export async function exportVideoBackendVariant({
                 }, Math.max(0, Math.round(allenkFdncnnPadding)));
             }
             if (Number.isFinite(videoBitrate) && videoBitrate > 0) {
+                await page.evaluate((value) => {
+                    window.__gwrVideoOverrideBitrate = value;
+                }, videoBitrate);
                 await setNumericInputValue(page, '#videoBitrateMbps', videoBitrate / 1000 / 1000);
             }
             if (allowLowConfidence) {

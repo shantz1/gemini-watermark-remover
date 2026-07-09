@@ -137,6 +137,58 @@ test('createAllenkGradientMask should match Allenk OpenCV edge handling for Veo 
     assert.ok(Math.abs(mask.reduce((sum, value) => sum + value, 0) - 210.456879) < 0.75);
 });
 
+test('blendAllenkDenoisedRoi should protect strong source edges from dark denoised artifacts', () => {
+    const width = 6;
+    const height = 3;
+    const original = new Uint8ClampedArray(width * height * 4);
+    const denoised = new Uint8ClampedArray(width * height * 4);
+    const weights = new Float32Array(width * height).fill(0.8);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const pixel = y * width + x;
+            const idx = pixel * 4;
+            const source = x < 3 ? 60 : 180;
+            original[idx] = source;
+            original[idx + 1] = source;
+            original[idx + 2] = source;
+            original[idx + 3] = 255;
+            denoised[idx] = 20;
+            denoised[idx + 1] = 20;
+            denoised[idx + 2] = 20;
+            denoised[idx + 3] = 255;
+        }
+    }
+
+    const protectedOutput = blendAllenkDenoisedRoi({
+        originalData: original,
+        denoisedData: denoised,
+        weights,
+        width,
+        height,
+        protectStructure: true
+    });
+    const unprotectedOutput = blendAllenkDenoisedRoi({
+        originalData: original,
+        denoisedData: denoised,
+        weights,
+        width,
+        height,
+        protectStructure: false
+    });
+
+    const flatPixel = 1 * width + 1;
+    const edgePixel = 1 * width + 3;
+    assert.ok(
+        Math.abs(protectedOutput[flatPixel * 4] - unprotectedOutput[flatPixel * 4]) <= 2,
+        `flat protected=${protectedOutput[flatPixel * 4]}, unprotected=${unprotectedOutput[flatPixel * 4]}`
+    );
+    assert.ok(
+        protectedOutput[edgePixel * 4] > unprotectedOutput[edgePixel * 4] + 80,
+        `edge protected=${protectedOutput[edgePixel * 4]}, unprotected=${unprotectedOutput[edgePixel * 4]}`
+    );
+});
+
 test('calculateAllenkPaddedRoi should clamp padding and report inner region', () => {
     const padded = calculateAllenkPaddedRoi({
         imageWidth: 100,

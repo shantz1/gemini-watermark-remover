@@ -1187,7 +1187,8 @@ function applyAllenkFdncnnDenoisedPatch(ctx, prepared, denoised) {
         denoisedData: denoised.imageData.data,
         weights: prepared.weights,
         width: prepared.padded.width,
-        height: prepared.padded.height
+        height: prepared.padded.height,
+        protectStructure: true
     });
 
     const patch = cropAllenkVisiblePatch(prepared, blended);

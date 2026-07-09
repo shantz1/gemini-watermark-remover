@@ -51,3 +51,9 @@ test('withLocalVideoPreviewPage should leave http preview pages unchanged', asyn
         assert.equal(context.server, null);
     });
 });
+
+test('SDK video export should keep explicit bitrate through page auto presets', async () => {
+    const source = await readFile(new URL('../../src/sdk/video.js', import.meta.url), 'utf8');
+
+    assert.match(source, /__gwrVideoOverrideBitrate/);
+});

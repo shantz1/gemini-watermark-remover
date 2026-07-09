@@ -45,7 +45,11 @@ test('resolveExportAllenkFdncnnPadding should leave non-Allenk cleanup without p
 });
 
 test('createVideoExportEncodingConfig should prefer compatibility-safe high-quality AVC settings', () => {
-    assert.deepEqual(createVideoExportEncodingConfig(9_000_000), {
+    const config = createVideoExportEncodingConfig(9_000_000);
+    assert.equal(typeof config.onEncodedPacket, 'function');
+
+    const { onEncodedPacket, ...serializableConfig } = config;
+    assert.deepEqual(serializableConfig, {
         codec: 'avc',
         bitrate: 9_000_000,
         alpha: 'discard',
@@ -59,4 +63,30 @@ test('createVideoExportEncodingConfig should prefer compatibility-safe high-qual
 
 test('createVideoExportEncodingConfig should default to a high bitrate for full-video re-encoding', () => {
     assert.equal(createVideoExportEncodingConfig(null).bitrate, 12_000_000);
+});
+
+test('createVideoExportEncodingConfig should force BT.709 limited-range decoder metadata', () => {
+    const config = createVideoExportEncodingConfig(9_000_000);
+    const meta = {
+        decoderConfig: {
+            codec: 'avc1.64001f',
+            codedWidth: 1280,
+            codedHeight: 720,
+            colorSpace: {
+                primaries: 'smpte170m',
+                transfer: 'smpte170m',
+                matrix: 'smpte170m',
+                fullRange: false
+            }
+        }
+    };
+
+    config.onEncodedPacket(null, meta);
+
+    assert.deepEqual(meta.decoderConfig.colorSpace, {
+        primaries: 'bt709',
+        transfer: 'bt709',
+        matrix: 'bt709',
+        fullRange: false
+    });
 });
