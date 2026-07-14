@@ -3,9 +3,12 @@ import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
 import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import {
+    DEFAULT_VIDEO_TIMEOUT_MS,
+    waitForVideoProcessing
+} from './videoProgress.js';
 
 const DEFAULT_VIDEO_DENOISE_BACKEND = 'allenk-fdncnn-browser-spike';
-const DEFAULT_VIDEO_TIMEOUT_MS = 6 * 60 * 1000;
 
 function normalizeBufferLike(value) {
     if (Buffer.isBuffer(value)) return value;
@@ -201,7 +204,8 @@ async function processVideoWithPreviewPage(inputPath, options = {}) {
         videoBitrate,
         adaptiveAlpha = false,
         alphaGain,
-        alphaProfile
+        alphaProfile,
+        onProgress
     } = options;
 
     if (!isHttpUrl(pagePath)) {
@@ -215,7 +219,7 @@ async function processVideoWithPreviewPage(inputPath, options = {}) {
     try {
         return await withLocalVideoPreviewPage(pagePath, async (pageUrl) => {
             const page = await browser.newPage();
-            page.setDefaultTimeout(timeoutMs);
+            page.setDefaultTimeout(Math.min(timeoutMs, 30_000));
             await page.goto(pageUrl);
             await page.locator('#fileInput').setInputFiles(inputPath);
             await page.evaluate((value) => {
@@ -262,13 +266,11 @@ async function processVideoWithPreviewPage(inputPath, options = {}) {
             }
 
             await page.locator('#processBtn').click();
-            await page.waitForFunction(() => {
-                const status = document.getElementById('status');
-                return status?.dataset?.tone === 'success' || status?.dataset?.tone === 'error';
-            }, null, { timeout: timeoutMs });
-
-            const status = await page.locator('#status').textContent();
-            const tone = await page.locator('#status').getAttribute('data-tone');
+            const completion = await waitForVideoProcessing(page, {
+                timeoutMs,
+                onProgress
+            });
+            const { status, tone } = completion;
             if (tone !== 'success') {
                 throw new Error(status || 'Video export failed');
             }
