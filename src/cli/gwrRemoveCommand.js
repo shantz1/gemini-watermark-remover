@@ -12,7 +12,7 @@ import {
 const REMOVE_USAGE =
   'Usage: gwr remove <input> [--output <file> | --out-dir <dir>] [--overwrite] [--json] [--video-page <url-or-file>] [--video-timeout-ms <ms>] [--video-bitrate-mbps <Mbps>]';
 
-export async function runRemoveCommand(argv, io) {
+export async function runRemoveCommand(argv, io, dependencies = {}) {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
     io.stdout.write(`${REMOVE_USAGE}\n`);
     return 0;
@@ -27,7 +27,8 @@ export async function runRemoveCommand(argv, io) {
   const commandOptions = {
     ...options,
     imageCodecPromise: null,
-    onVideoProgress: createVideoProgressReporter(io.stderr)
+    onVideoProgress: createVideoProgressReporter(io.stderr),
+    removeVideoFile: dependencies.removeVideoWatermarkFromFile || removeVideoWatermarkFromFile
   };
   const inputStats = await stat(commandOptions.input).catch(() => null);
   if (!inputStats) {
@@ -378,7 +379,7 @@ async function processOneFile(inputPath, outputPath, options) {
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   if (isVideoPath(inputPath) || isVideoPath(outputPath)) {
-    const result = await removeVideoWatermarkFromFile(inputPath, {
+    const result = await options.removeVideoFile(inputPath, {
       outputPath,
       mimeType: inferVideoMimeTypeFromPath(outputPath || inputPath),
       pagePath: options.videoPage || undefined,

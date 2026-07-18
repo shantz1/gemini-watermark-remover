@@ -5,6 +5,7 @@ import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import {
     DEFAULT_VIDEO_TIMEOUT_MS,
+    configureVideoPageTimeouts,
     waitForVideoProcessing
 } from './videoProgress.js';
 
@@ -219,7 +220,7 @@ async function processVideoWithPreviewPage(inputPath, options = {}) {
     try {
         return await withLocalVideoPreviewPage(pagePath, async (pageUrl) => {
             const page = await browser.newPage();
-            page.setDefaultTimeout(Math.min(timeoutMs, 30_000));
+            configureVideoPageTimeouts(page);
             await page.goto(pageUrl);
             await page.locator('#fileInput').setInputFiles(inputPath);
             await page.evaluate((value) => {

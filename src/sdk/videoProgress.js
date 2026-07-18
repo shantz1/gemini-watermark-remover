@@ -1,5 +1,6 @@
 const DEFAULT_VIDEO_TIMEOUT_MS = 6 * 60 * 1000;
 const DEFAULT_VIDEO_PROGRESS_POLL_INTERVAL_MS = 1000;
+const DEFAULT_VIDEO_PAGE_SETUP_TIMEOUT_MS = 30_000;
 
 function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,6 +48,11 @@ function describeProgress(snapshot) {
         .join(' - ');
 }
 
+function configureVideoPageTimeouts(page) {
+    page.setDefaultTimeout(DEFAULT_VIDEO_PAGE_SETUP_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(DEFAULT_VIDEO_PAGE_SETUP_TIMEOUT_MS);
+}
+
 async function waitForVideoProcessing(page, options = {}) {
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
         ? options.timeoutMs
@@ -92,8 +98,10 @@ async function waitForVideoProcessing(page, options = {}) {
 }
 
 export {
+    DEFAULT_VIDEO_PAGE_SETUP_TIMEOUT_MS,
     DEFAULT_VIDEO_PROGRESS_POLL_INTERVAL_MS,
     DEFAULT_VIDEO_TIMEOUT_MS,
+    configureVideoPageTimeouts,
     describeProgress,
     waitForVideoProcessing
 };
